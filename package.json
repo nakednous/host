@@ -1,0 +1,50 @@
+{
+  "name": "@nakednous/host",
+  "version": "0.0.1",
+  "description": "host — DOM transport for @nakednous/tree: pointer, handles, players, device streams, media. Zero renderer.",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist/"
+  ],
+  "scripts": {
+    "build": "rollup -c",
+    "clean": "rm -rf dist",
+    "rebuild": "npm run clean && npm run build",
+    "reset": "rm -rf node_modules dist package-lock.json && npm install",
+    "link:core": "npm link @nakednous/tree",
+    "unlink:core": "npm unlink --no-save @nakednous/tree && npm install @nakednous/tree",
+    "prepublishOnly": "npm run build",
+    "postpublish": "npm run link:core"
+  },
+  "keywords": [
+    "tree",
+    "pointer",
+    "manipulator",
+    "handle",
+    "helm",
+    "keyframes",
+    "webhid",
+    "gamepad",
+    "dom"
+  ],
+  "author": "Jean Pierre Charalambos <nakednous@gmail.com>",
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nakednous/host.git"
+  },
+  "dependencies": {
+    "@nakednous/tree": "^0.0.27"
+  },
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "^16.0.3",
+    "rollup": "^4.63.1"
+  }
+}
