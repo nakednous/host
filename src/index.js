@@ -16,6 +16,7 @@
  *   host.poseTrack(opts) · host.cameraTrack(cam, opts)
  *   host.hid(opts) · host.gamepad(opts)
  *   host.image(url) · host.video(opts) · host.raster(draw, w, h)
+ *   host.labels        // the DOM label layer, created on first access
  *   host.tick(dt)      // external-loop mode
  *   host.dispose()
  *
@@ -43,6 +44,7 @@ import { cameraHelm, poseHelm } from './helm.js';
 import { poseTrack, cameraTrack } from './track.js';
 import { createHid, createGamepad } from './stream.js';
 import { loadImage, createVideo, raster } from './media.js';
+import { createLabels } from './labels.js';
 
 export { createView } from './view.js';
 export { observeCanvas, measureCanvas } from './canvas.js';
@@ -54,6 +56,7 @@ export { cameraHelm, poseHelm, helmBasis } from './helm.js';
 export { poseTrack, cameraTrack, TrackHandles } from './track.js';
 export { createHid, createGamepad, decodeSpaceNavigator, HID_FILTERS, GAMEPAD_MAP } from './stream.js';
 export { loadImage, createVideo, raster } from './media.js';
+export { createLabels } from './labels.js';
 
 const _now = () => (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
 
@@ -73,7 +76,7 @@ export function createHost(canvas, opts) {
   const o = opts || {};
   const t0 = _now();
   const constructs = new Set();
-  let loop = null, observer = null;
+  let loop = null, observer = null, labels = null;
   const host = {
     canvas,
     width: 0, height: 0, dpr: 1,
@@ -131,6 +134,14 @@ export function createHost(canvas, opts) {
     video(opts) { return host.register(createVideo(opts)); },
     /** Draw through a 2D context into a texture source — see host/media. */
     raster(draw, w, h, opts) { return raster(draw, w, h, opts); },
+    /**
+     * The label layer — see host/labels. Created on first access, so a
+     * canvas that never labels never gets a layer nor a repositioned parent.
+     */
+    get labels() {
+      if (labels === null) labels = createLabels(host);
+      return labels;
+    },
 
     /** Register a construct with dispose() so host.dispose() releases it. */
     register(c) { if (c) constructs.add(c); return c; },
@@ -142,6 +153,7 @@ export function createHost(canvas, opts) {
       if (loop) loop.stop();
       for (const c of [...constructs]) { if (typeof c.dispose === 'function') c.dispose(); }
       constructs.clear();
+      labels = null;
       observer.dispose();
       host.pointer.dispose();
       host.players.clear();
@@ -154,6 +166,7 @@ export function createHost(canvas, opts) {
   observer = observeCanvas(canvas, (w, h, dpr) => {
     host.width = w; host.height = h; host.dpr = dpr;
     host.view.resize(w, h);
+    if (labels) labels.resize(w, h);
     if (typeof o.onSize === 'function') o.onSize(w, h, dpr);
   });
 
