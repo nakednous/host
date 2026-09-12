@@ -14,6 +14,7 @@
     "dist/"
   ],
   "scripts": {
+    "test": "node --test test/",
     "build": "rollup -c",
     "clean": "rm -rf dist",
     "rebuild": "npm run clean && npm run build",
