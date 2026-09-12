@@ -88,6 +88,28 @@ test('orbit: two pointers pan by their midpoint at the center depth and dolly by
   host.dispose();
 });
 
+test('orbit: under a y-flipped projection (p5) the vertical drag and pan reverse; the horizontal ones do not', () => {
+  const { host, cam, down, move, frame } = rig({ rotate: 0.01 });
+  const P = new Float32Array(host.view.mat4Proj);
+  P[5] = -P[5];                                       // p5's projection: NDC y-down
+  host.view.set(P, host.view.mat4View);
+  down(1, 100, 100); frame();
+  move(1, 100, 150); frame();                         // +50 px down: the scene follows, the eye sinks
+  assert.ok(cam.eye[1] < 0);
+  move(1, 200, 150); frame();                         // +100 px right: unchanged
+  assert.ok(cam.eye[0] < 0);
+  host.dispose();
+
+  const r2 = rig();
+  const P2 = new Float32Array(r2.host.view.mat4Proj); P2[5] = -P2[5];
+  r2.host.view.set(P2, r2.host.view.mat4View);
+  r2.down(1, 100, 100); r2.down(2, 200, 100); r2.frame();
+  r2.move(1, 100, 150); r2.move(2, 200, 150); r2.frame();
+  assert.ok(r2.cam.eye[1] < 0);
+  near(r2.cam.eye[1], r2.cam.center[1]);
+  r2.host.dispose();
+});
+
 test('orbit: the wheel dollies with exp(deltaY / 1000), lines scale by 16, clamps hold, and it prevents the default', () => {
   const { canvas, cam, orbit, frame, host } = rig({ minDistance: 2, maxDistance: 12 });
   let prevented = 0;

@@ -83,7 +83,7 @@ dependency first and an options object last, and registers with the context so
 | `host.hid(opts)` · `host.gamepad(opts)` | rate streams — `lin[3]` / `ang[3]` in raw device units, `bind(helm)` feeds it each tick; `available`, `connected` |
 | `host.image(url)` · `host.video(opts)` · `host.raster(draw, w, h)` | texture sources — an `ImageBitmap`, a hidden `<video>` from a file or the camera with a `ready` promise, a Canvas2D drawing |
 | `host.labels` · `host.hasLabels` | the label layer, created on first access — `set(id, text, x, y, z, opts)` at a world anchor, `setScreen(id, text, sx, sy, opts)` in canvas px, `{ frame: true }` for a label that lives one frame, `tick()`; `hasLabels` probes without creating |
-| `host.orbit(cam, opts)` | the fall-through gesture — one pointer orbits, two pan and dolly, the wheel dollies; `update()` reports whether the camera moved |
+| `host.orbit(cam, opts)` | the fall-through gesture — one pointer orbits, two pan and dolly, the wheel dollies; `update()` reports whether the camera moved; the vertical sense follows the bag's projection (y-up GL, y-flipped p5) |
 | `host.tick(dt)` | external-loop mode: tick the players; the caller flushes the pointer once its consumers ran |
 | `host.register(c)` · `host.unregister(c)` · `host.dispose()` | the lifecycle |
 

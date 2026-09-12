@@ -17,6 +17,12 @@
  * does not scroll or zoom the page instead. No damping, no inertia: direct
  * manipulation wants exactness, and a sketch that wants smoothing lerps the
  * camera it owns.
+ *
+ * Screen y runs down; which world direction that is depends on the
+ * projection installed in the view bag: a y-up projection (GL's, tree's
+ * default) maps a downward drag to the eye's −up, a y-flipped one (p5's,
+ * mat4Proj[5] < 0) to +up. The orbit reads that sign off the bag each
+ * update, so a drag down always brings the scene down.
  */
 
 'use strict';
@@ -102,11 +108,13 @@ export function createOrbit(host, cam, opts) {
         if ((a === null || id !== a.id) && (b === null || id !== b.id)) tracked.delete(id);
       }
       let moved = false;
+      const view = host.view;
+      const ys = view.mat4Proj[5] < 0 ? -1 : 1;   // screen-down is the eye's −up under a y-up projection, +up under p5's flip
       if (a !== null && b === null) {
         const t = tracked.get(a.id);
         if (t) {
           const dx = a.x - t.x, dy = a.y - t.y;
-          if (dx !== 0 || dy !== 0) { cameraOrbit(cam, -dx * orbit.rotate, dy * orbit.rotate); moved = true; }
+          if (dx !== 0 || dy !== 0) { cameraOrbit(cam, -dx * orbit.rotate, ys * dy * orbit.rotate); moved = true; }
         }
         track(a);
       } else if (a !== null && b !== null) {
@@ -114,9 +122,8 @@ export function createOrbit(host, cam, opts) {
         if (ta && tb) {
           const dmx = (a.x + b.x - ta.x - tb.x) / 2, dmy = (a.y + b.y - ta.y - tb.y) / 2;
           if (dmx !== 0 || dmy !== 0) {
-            const view = host.view;
             const ratio = pixelRatio(view.mat4Proj, -view.vp[3] || 1, -distance(), view.ndcZMin);
-            cameraPan(cam, -dmx * ratio * orbit.pan, dmy * ratio * orbit.pan);
+            cameraPan(cam, -dmx * ratio * orbit.pan, ys * dmy * ratio * orbit.pan);
             moved = true;
           }
           const d0 = Math.hypot(ta.x - tb.x, ta.y - tb.y), d1 = Math.hypot(a.x - b.x, a.y - b.y);
