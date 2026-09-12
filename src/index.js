@@ -12,6 +12,8 @@
  *   host.pointer · host.view · host.players
  *   host.width · host.height · host.dpr · host.dt · host.clock()
  *   host.handle(opts) · host.router(handles, opts)
+ *   host.cameraHelm(cam, opts) · host.poseHelm(opts)
+ *   host.poseTrack(opts) · host.cameraTrack(cam, opts)
  *   host.tick(dt)      // external-loop mode
  *   host.dispose()
  *
@@ -35,6 +37,8 @@ import { createPointer } from './pointer.js';
 import { createPlayers, createLoop } from './loop.js';
 import { Handle, validConstraint } from './handle.js';
 import { PointerRouter } from './router.js';
+import { cameraHelm, poseHelm } from './helm.js';
+import { poseTrack, cameraTrack } from './track.js';
 
 export { createView } from './view.js';
 export { observeCanvas, measureCanvas } from './canvas.js';
@@ -42,6 +46,8 @@ export { createPointer } from './pointer.js';
 export { createPlayers, createLoop } from './loop.js';
 export { Handle, VIEW, isConstraint, validConstraint } from './handle.js';
 export { PointerRouter } from './router.js';
+export { cameraHelm, poseHelm, helmBasis } from './helm.js';
+export { poseTrack, cameraTrack, TrackHandles } from './track.js';
 
 const _now = () => (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
 
@@ -100,6 +106,15 @@ export function createHost(canvas, opts) {
      * @returns {PointerRouter}
      */
     router(handles, opts) { return host.register(new PointerRouter(host, handles, opts)); },
+
+    /** Fly a camera state body-relative from a 6-DOF rate stream — see host/helm. */
+    cameraHelm(cam, opts) { return cameraHelm(host, cam, opts); },
+    /** Integrate a 6-DOF rate stream into a pose in a declared frame — see host/helm. */
+    poseHelm(opts) { return poseHelm(host, opts); },
+    /** A core PoseTrack ticked while it plays — see host/track. */
+    poseTrack(opts) { return poseTrack(host, opts); },
+    /** A core CameraTrack evaluating into a camera state while it plays — see host/track. */
+    cameraTrack(cam, opts) { return cameraTrack(host, cam, opts); },
 
     /** Register a construct with dispose() so host.dispose() releases it. */
     register(c) { if (c) constructs.add(c); return c; },

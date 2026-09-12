@@ -21,7 +21,7 @@ WebGL or WebGPU — it owns a canvas element's input and the frame clock, and ha
       ▼
   twgl.tree · webgpu.tree     ← bridge: the GPU, thinly
       │
-      ├── @nakednous/host     ← this package: pointer, handles, players, streams, media
+      ├── @nakednous/host     ← this package: pointer, handles, tracks, helms, players, streams, media
       │        │
       │        └── @nakednous/tree
       │
