@@ -49,6 +49,19 @@ test('orbit: one pointer drags the eye about the center; no motion means no move
   assert.equal(canvas.listenerCount('wheel'), 0);
 });
 
+test('orbit: a hovering mouse never orbits; the press that follows starts from its own position', () => {
+  const { cam, canvas, move, down, frame, host } = rig({ rotate: 0.01 });
+  move(1, 100, 100); frame();
+  move(1, 300, 100);
+  assert.equal(frame(), false);
+  near3(cam.eye, [0, 0, 10]);
+  down(1, 300, 100); frame();
+  move(1, 310, 100);
+  assert.equal(frame(), true);
+  near3(cam.eye, [10 * Math.sin(-0.1), 0, 10 * Math.cos(0.1)]);
+  host.dispose();
+});
+
 test('orbit: a claimed pointer is invisible; a release drops its memory so re-press never jumps', () => {
   const { cam, down, move, up, frame, host } = rig({ rotate: 0.01 });
   down(1, 100, 100);

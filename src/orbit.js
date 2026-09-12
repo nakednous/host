@@ -100,7 +100,8 @@ export function createOrbit(host, cam, opts) {
       const src = host.pointer;
       let a = null, b = null;
       for (const p of src.pointers.values()) {
-        if (p.owner !== null || p.up || p.cancel) { tracked.delete(p.id); continue; }
+        // a hovering mouse has an entry without a press; only pressed, unclaimed, live pointers drive
+        if (!p.down || p.owner !== null || p.up || p.cancel) { tracked.delete(p.id); continue; }
         if (a === null || p.id < a.id) { b = a; a = p; }
         else if (b === null || p.id < b.id) b = p;
       }
