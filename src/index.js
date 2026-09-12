@@ -11,6 +11,7 @@
  *   const host = createHost(canvas, { onFrame })
  *   host.pointer · host.view · host.players
  *   host.width · host.height · host.dpr · host.dt · host.clock()
+ *   host.handle(opts) · host.router(handles, opts)
  *   host.tick(dt)      // external-loop mode
  *   host.dispose()
  *
@@ -32,11 +33,15 @@ import { createView } from './view.js';
 import { observeCanvas } from './canvas.js';
 import { createPointer } from './pointer.js';
 import { createPlayers, createLoop } from './loop.js';
+import { Handle, validConstraint } from './handle.js';
+import { PointerRouter } from './router.js';
 
 export { createView } from './view.js';
 export { observeCanvas, measureCanvas } from './canvas.js';
 export { createPointer } from './pointer.js';
 export { createPlayers, createLoop } from './loop.js';
+export { Handle, VIEW, isConstraint, validConstraint } from './handle.js';
+export { PointerRouter } from './router.js';
 
 const _now = () => (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
 
@@ -72,6 +77,29 @@ export function createHost(canvas, opts) {
      * @param {number} dt
      */
     tick(dt) { host.dt = dt; host.players.tick(dt); },
+
+    /**
+     * A draggable handle on this canvas — see host/handle. Returns null on
+     * an invalid `constraint`.
+     * @param {object} opts
+     * @returns {Handle|null}
+     */
+    handle(opts) {
+      const o = opts || {};
+      if (!validConstraint(o.constraint)) {
+        console.error('[host] handle: `constraint` must be SPHERE, PLANE, AXIS, DIAL, VIEW, or a contract-conforming constraint object; got ' + String(o.constraint) + '.');
+        return null;
+      }
+      return host.register(new Handle(host, o));
+    },
+
+    /**
+     * A shared pick over overlapping handles — see host/router.
+     * @param {Handle[]} handles
+     * @param {{ hover?:boolean }} [opts]
+     * @returns {PointerRouter}
+     */
+    router(handles, opts) { return host.register(new PointerRouter(host, handles, opts)); },
 
     /** Register a construct with dispose() so host.dispose() releases it. */
     register(c) { if (c) constructs.add(c); return c; },
