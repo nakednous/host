@@ -145,6 +145,8 @@ export function createHost(canvas, opts) {
       if (labels === null) labels = createLabels(host);
       return labels;
     },
+    /** Whether the label layer exists, without creating it. */
+    get hasLabels() { return labels !== null; },
     /** The fall-through camera gesture on unclaimed pointers — see host/orbit. */
     orbit(cam, opts) { return createOrbit(host, cam, opts); },
 

@@ -27,7 +27,9 @@ test('labels: created on first access as the canvas sibling; a static parent bec
   const infos = [];
   const orig = console.info; console.info = (m) => infos.push(m);
   let labels;
+  assert.equal(host.hasLabels, false);
   try { labels = host.labels; assert.equal(host.labels, labels); } finally { console.info = orig; }
+  assert.equal(host.hasLabels, true);
   assert.equal(parent.style.position, 'relative');
   assert.equal(infos.length, 1);
   assert.equal(parent.children[0], canvas);
