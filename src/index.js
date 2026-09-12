@@ -17,6 +17,7 @@
  *   host.hid(opts) · host.gamepad(opts)
  *   host.image(url) · host.video(opts) · host.raster(draw, w, h)
  *   host.labels        // the DOM label layer, created on first access
+ *   host.orbit(cam, opts)
  *   host.tick(dt)      // external-loop mode
  *   host.dispose()
  *
@@ -45,6 +46,7 @@ import { poseTrack, cameraTrack } from './track.js';
 import { createHid, createGamepad } from './stream.js';
 import { loadImage, createVideo, raster } from './media.js';
 import { createLabels } from './labels.js';
+import { createOrbit } from './orbit.js';
 
 export { createView } from './view.js';
 export { observeCanvas, measureCanvas } from './canvas.js';
@@ -57,6 +59,7 @@ export { poseTrack, cameraTrack, TrackHandles } from './track.js';
 export { createHid, createGamepad, decodeSpaceNavigator, HID_FILTERS, GAMEPAD_MAP } from './stream.js';
 export { loadImage, createVideo, raster } from './media.js';
 export { createLabels } from './labels.js';
+export { createOrbit } from './orbit.js';
 
 const _now = () => (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
 
@@ -142,6 +145,8 @@ export function createHost(canvas, opts) {
       if (labels === null) labels = createLabels(host);
       return labels;
     },
+    /** The fall-through camera gesture on unclaimed pointers — see host/orbit. */
+    orbit(cam, opts) { return createOrbit(host, cam, opts); },
 
     /** Register a construct with dispose() so host.dispose() releases it. */
     register(c) { if (c) constructs.add(c); return c; },
