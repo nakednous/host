@@ -8,6 +8,7 @@
  *
  *   view = {
  *     mat4Proj, mat4View, mat4PV, mat4PVInv,   // Float32Array(16) each, host-owned
+ *     mat4Eye,                                 // inverse of mat4View — EYE → WORLD
  *     vp,                                      // [0, h, w, −h] — y-down, logical canvas px
  *     ndcZMin,                                 // WEBGL | WEBGPU, set once at creation
  *     stale,                                   // true until a set() with an invertible P · V
@@ -16,10 +17,10 @@
  *     resize(width, height)                    // the canvas observer's write into vp
  *   }
  *
- * mat4PVInv is recomputed on set, once per frame, so unproject and every
- * SCREEN → WORLD mapping share it. A degenerate P · V leaves the previous
- * inverse and marks the bag stale; consumers treat a stale bag as "no pick
- * this frame".
+ * mat4PVInv and mat4Eye are recomputed on set, once per frame, so unproject
+ * and every mapping from SCREEN or EYE share them. A degenerate P · V or V
+ * leaves the previous inverses and marks the bag stale; consumers treat a
+ * stale bag as "no pick this frame".
  */
 
 'use strict';
@@ -53,14 +54,15 @@ export function createView(opts) {
     mat4View:  _identity(new Float32Array(16)),
     mat4PV:    _identity(new Float32Array(16)),
     mat4PVInv: _identity(new Float32Array(16)),
+    mat4Eye:   _identity(new Float32Array(16)),
     vp: [0, h, w, -h],
     ndcZMin: o.ndcZMin === 0 ? 0 : WEBGL,
     stale: true,
 
     /**
-     * Install a projection and a view: both copied, P · V and its inverse
-     * recomputed. A singular product keeps the previous inverse and marks
-     * the bag stale.
+     * Install a projection and a view: both copied, P · V with its inverse
+     * and the eye matrix (V's inverse) recomputed. A singular product or
+     * view keeps the previous inverses and marks the bag stale.
      * @param {ArrayLike<number>} P  Projection mat4.
      * @param {ArrayLike<number>} V  View mat4 (world → eye).
      * @returns {object} this
@@ -70,6 +72,8 @@ export function createView(opts) {
       mat4Mul(view.mat4PV, view.mat4Proj, view.mat4View);
       if (mat4Invert(_inv, view.mat4PV) === null) { view.stale = true; return view; }
       view.mat4PVInv.set(_inv);
+      if (mat4Invert(_inv, view.mat4View) === null) { view.stale = true; return view; }
+      view.mat4Eye.set(_inv);
       view.stale = false;
       return view;
     },
