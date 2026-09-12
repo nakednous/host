@@ -113,6 +113,21 @@ test('labels: a stale bag hides world labels but not screen labels; visible togg
   host.dispose();
 });
 
+test('labels: a frame label lives while it is re-set each frame and goes once a tick passes without', () => {
+  const { host } = hostInParent();
+  const labels = host.labels;
+  labels.setScreen('t', 'transient', 1, 1, { frame: true }).setScreen('k', 'kept', 2, 2);
+  labels.tick();
+  assert.equal(labels.size, 2);
+  labels.setScreen('t', 'transient', 1, 1, { frame: true });
+  labels.tick();
+  assert.equal(labels.size, 2);
+  labels.tick();
+  assert.equal(labels.size, 1);
+  assert.equal(labels.el.children[0].textContent, 'kept');
+  host.dispose();
+});
+
 test('labels: a canvas without a parent yields null and an error', () => {
   installDocument();
   const host = createHost(createCanvas());

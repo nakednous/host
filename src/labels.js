@@ -15,10 +15,12 @@
  *   labels.tick()                            // after the view bag is current
  *
  * opts: dx / dy pixel offsets, anchor ('center' default, 'left', 'right'),
- * class — a CSS class beside the layer's own 'host-label'. A label whose
- * screen depth leaves [0, 1] or whose anchor leaves the canvas is hidden,
- * not clamped. Elements are reused by id; tick() writes transforms only,
- * text when the string changed.
+ * class — a CSS class beside the layer's own 'host-label', frame — a
+ * transient label that lives for the frame it was set in: a gizmo re-sets
+ * it every draw and tick() removes it once a frame passes without. A label
+ * whose screen depth leaves [0, 1] or whose anchor leaves the canvas is
+ * hidden, not clamped. Elements are reused by id; tick() writes transforms
+ * only, text when the string changed.
  */
 
 'use strict';
@@ -27,6 +29,7 @@ import { WORLD, SCREEN, mapLocation } from '@nakednous/tree';
 
 const _p = [0, 0, 0];
 const _ANCHOR = { center: -50, left: 0, right: -100 };
+const _NO_OPTS = {};
 
 /**
  * Create the label layer of a canvas. The layer is inserted at once; it
@@ -59,20 +62,22 @@ export function createLabels(host, opts) {
   const entries = new Map();   // id → { el, text, x, y, z, dx, dy, ax, screen, cls, sx, sy, shown }
   let width = 0, height = 0, left = -1, top = -1, visible = true;
 
-  const entry = (id, text, cls, ax) => {
+  const entry = (id, text, o) => {
     let e = entries.get(id);
     if (!e) {
       const span = doc.createElement('span');
       Object.assign(span.style, { position: 'absolute', left: '0px', top: '0px', whiteSpace: 'nowrap', willChange: 'transform' });
       span.style.visibility = 'hidden';
       el.appendChild(span);
-      e = { el: span, text: null, x: 0, y: 0, z: 0, dx: 0, dy: 0, ax: -50, screen: false, cls: null, sx: NaN, sy: NaN, shown: false };
+      e = { el: span, text: null, x: 0, y: 0, z: 0, dx: 0, dy: 0, ax: -50, screen: false, cls: null, sx: NaN, sy: NaN, shown: false, frame: false, fresh: false };
       entries.set(id, e);
     }
     if (e.text !== text) { e.text = text; e.el.textContent = text; }
-    const c = cls || null;
+    const c = o.class || null;
     if (e.cls !== c) { e.cls = c; e.el.className = c ? 'host-label ' + c : 'host-label'; }
-    e.ax = ax;
+    e.ax = _ANCHOR[o.anchor] ?? -50;
+    e.dx = o.dx || 0; e.dy = o.dy || 0;
+    e.frame = !!o.frame; e.fresh = true;
     return e;
   };
   const place = (e, sx, sy) => {
@@ -100,13 +105,12 @@ export function createLabels(host, opts) {
      * @param {string} id
      * @param {string} text
      * @param {number} x, y, z  World anchor.
-     * @param {{ dx?:number, dy?:number, anchor?:string, class?:string }} [opts]
+     * @param {{ dx?:number, dy?:number, anchor?:string, class?:string, frame?:boolean }} [opts]
      * @returns {object} this
      */
     set(id, text, x, y, z, opts) {
-      const o = opts || {};
-      const e = entry(id, text, o.class, _ANCHOR[o.anchor] ?? -50);
-      e.screen = false; e.x = x; e.y = y; e.z = z; e.dx = o.dx || 0; e.dy = o.dy || 0;
+      const e = entry(id, text, opts || _NO_OPTS);
+      e.screen = false; e.x = x; e.y = y; e.z = z;
       return labels;
     },
 
@@ -115,13 +119,12 @@ export function createLabels(host, opts) {
      * @param {string} id
      * @param {string} text
      * @param {number} sx, sy  Canvas px, y down.
-     * @param {{ dx?:number, dy?:number, anchor?:string, class?:string }} [opts]
+     * @param {{ dx?:number, dy?:number, anchor?:string, class?:string, frame?:boolean }} [opts]
      * @returns {object} this
      */
     setScreen(id, text, sx, sy, opts) {
-      const o = opts || {};
-      const e = entry(id, text, o.class, _ANCHOR[o.anchor] ?? -50);
-      e.screen = true; e.x = sx; e.y = sy; e.z = 0; e.dx = o.dx || 0; e.dy = o.dy || 0;
+      const e = entry(id, text, opts || _NO_OPTS);
+      e.screen = true; e.x = sx; e.y = sy; e.z = 0;
       return labels;
     },
 
@@ -145,7 +148,9 @@ export function createLabels(host, opts) {
       const ol = canvas.offsetLeft || 0, ot = canvas.offsetTop || 0;
       if (ol !== left || ot !== top) { left = ol; top = ot; el.style.left = ol + 'px'; el.style.top = ot + 'px'; }
       const view = host.view;
-      for (const e of entries.values()) {
+      for (const [id, e] of entries) {
+        if (e.frame && !e.fresh) { labels.remove(id); continue; }
+        e.fresh = false;
         let sx, sy, on;
         if (e.screen) { sx = e.x; sy = e.y; on = true; }
         else if (!view || view.stale) { on = false; }
