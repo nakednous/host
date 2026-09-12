@@ -15,6 +15,7 @@
  *   host.cameraHelm(cam, opts) · host.poseHelm(opts)
  *   host.poseTrack(opts) · host.cameraTrack(cam, opts)
  *   host.hid(opts) · host.gamepad(opts)
+ *   host.image(url) · host.video(opts) · host.raster(draw, w, h)
  *   host.tick(dt)      // external-loop mode
  *   host.dispose()
  *
@@ -41,6 +42,7 @@ import { PointerRouter } from './router.js';
 import { cameraHelm, poseHelm } from './helm.js';
 import { poseTrack, cameraTrack } from './track.js';
 import { createHid, createGamepad } from './stream.js';
+import { loadImage, createVideo, raster } from './media.js';
 
 export { createView } from './view.js';
 export { observeCanvas, measureCanvas } from './canvas.js';
@@ -51,6 +53,7 @@ export { PointerRouter } from './router.js';
 export { cameraHelm, poseHelm, helmBasis } from './helm.js';
 export { poseTrack, cameraTrack, TrackHandles } from './track.js';
 export { createHid, createGamepad, decodeSpaceNavigator, HID_FILTERS, GAMEPAD_MAP } from './stream.js';
+export { loadImage, createVideo, raster } from './media.js';
 
 const _now = () => (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
 
@@ -122,6 +125,12 @@ export function createHost(canvas, opts) {
     hid(opts) { return createHid(host, opts); },
     /** A Gamepad rate stream, polled each tick — see host/stream. */
     gamepad(opts) { return createGamepad(host, opts); },
+    /** Fetch an image into an ImageBitmap — see host/media. */
+    image(url, opts) { return loadImage(url, opts); },
+    /** A hidden <video> from a file or the camera, disposed with the host — see host/media. */
+    video(opts) { return host.register(createVideo(opts)); },
+    /** Draw through a 2D context into a texture source — see host/media. */
+    raster(draw, w, h, opts) { return raster(draw, w, h, opts); },
 
     /** Register a construct with dispose() so host.dispose() releases it. */
     register(c) { if (c) constructs.add(c); return c; },
