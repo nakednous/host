@@ -14,6 +14,7 @@
  *   host.handle(opts) · host.router(handles, opts)
  *   host.cameraHelm(cam, opts) · host.poseHelm(opts)
  *   host.poseTrack(opts) · host.cameraTrack(cam, opts)
+ *   host.hid(opts) · host.gamepad(opts)
  *   host.tick(dt)      // external-loop mode
  *   host.dispose()
  *
@@ -39,6 +40,7 @@ import { Handle, validConstraint } from './handle.js';
 import { PointerRouter } from './router.js';
 import { cameraHelm, poseHelm } from './helm.js';
 import { poseTrack, cameraTrack } from './track.js';
+import { createHid, createGamepad } from './stream.js';
 
 export { createView } from './view.js';
 export { observeCanvas, measureCanvas } from './canvas.js';
@@ -48,6 +50,7 @@ export { Handle, VIEW, isConstraint, validConstraint } from './handle.js';
 export { PointerRouter } from './router.js';
 export { cameraHelm, poseHelm, helmBasis } from './helm.js';
 export { poseTrack, cameraTrack, TrackHandles } from './track.js';
+export { createHid, createGamepad, decodeSpaceNavigator, HID_FILTERS, GAMEPAD_MAP } from './stream.js';
 
 const _now = () => (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
 
@@ -115,6 +118,10 @@ export function createHost(canvas, opts) {
     poseTrack(opts) { return poseTrack(host, opts); },
     /** A core CameraTrack evaluating into a camera state while it plays — see host/track. */
     cameraTrack(cam, opts) { return cameraTrack(host, cam, opts); },
+    /** A WebHID 6-DOF rate stream — see host/stream. */
+    hid(opts) { return createHid(host, opts); },
+    /** A Gamepad rate stream, polled each tick — see host/stream. */
+    gamepad(opts) { return createGamepad(host, opts); },
 
     /** Register a construct with dispose() so host.dispose() releases it. */
     register(c) { if (c) constructs.add(c); return c; },
