@@ -1,7 +1,10 @@
 /**
- * @file Media sources — images, video and Canvas2D rasters for a bridge's textures.
+ * @file Media sources — images, video and Canvas2D rasters for a bridge's textures, OBJ models for its buffers.
  * @module host/media
  * @license AGPL-3.0-only
+ *
+ * A model arrives as arrays for a bridge's buffer upload: loadModel fetches an
+ * OBJ file and adapts webgl-obj-loader's mesh, no parser of its own.
  *
  * What a texture upload reads from: an ImageBitmap fetched from a URL, a
  * hidden <video> element from a file or the user's camera, a bitmap drawn
@@ -12,6 +15,8 @@
  */
 
 'use strict';
+
+import OBJ from 'webgl-obj-loader';
 
 /**
  * Fetch an image into an ImageBitmap.
@@ -27,6 +32,37 @@ export async function loadImage(url, opts) {
   if (!res.ok) throw new Error('[host] image: ' + url + ' → ' + res.status);
   const blob = await res.blob();
   return o.bitmap ? createImageBitmap(blob, o.bitmap) : createImageBitmap(blob);
+}
+
+/**
+ * Fetch an OBJ model into the arrays shape: position and indices, plus normal
+ * and texcoord when the file carries them. twgl's createBufferInfoFromArrays
+ * takes the result as it is.
+ *
+ * Parsing is webgl-obj-loader's: faces are triangulated and each distinct
+ * position / uv / normal triple becomes one vertex. Materials are ignored.
+ *
+ * @param {string} url
+ * @param {{ fetch?:object }} [opts]  fetch: the fetch init (credentials, mode, …).
+ * @returns {Promise<{ position:{numComponents:number,data:Float32Array},
+ *                     normal?:{numComponents:number,data:Float32Array},
+ *                     texcoord?:{numComponents:number,data:Float32Array},
+ *                     indices:{numComponents:number,data:Uint32Array} }>}
+ */
+export async function loadModel(url, opts) {
+  const o = opts || {};
+  const res = await fetch(url, o.fetch);
+  if (!res.ok) throw new Error('[host] model: ' + url + ' → ' + res.status);
+  const mesh = new OBJ.Mesh(await res.text());
+  const out = {
+    position: { numComponents: 3, data: new Float32Array(mesh.vertices) },
+    indices: { numComponents: 3, data: new Uint32Array(mesh.indices) },
+  };
+  // a file without normals leaves the loader's normals unset, one per component
+  const n = mesh.vertexNormals;
+  if (n.length && n.every(Number.isFinite)) out.normal = { numComponents: 3, data: new Float32Array(n) };
+  if (mesh.textures.length) out.texcoord = { numComponents: mesh.textureStride, data: new Float32Array(mesh.textures) };
+  return out;
 }
 
 /**

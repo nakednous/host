@@ -15,7 +15,7 @@
  *   host.cameraHelm(cam, opts) · host.poseHelm(opts)
  *   host.poseTrack(opts) · host.cameraTrack(cam, opts)
  *   host.hid(opts) · host.gamepad(opts)
- *   host.image(url) · host.video(opts) · host.raster(draw, w, h)
+ *   host.image(url) · host.video(opts) · host.raster(draw, w, h) · host.model(url)
  *   host.labels        // the DOM label layer, created on first access
  *   host.orbit(cam, opts)
  *   host.tick(dt)      // external-loop mode
@@ -44,7 +44,7 @@ import { PointerRouter } from './router.js';
 import { cameraHelm, poseHelm } from './helm.js';
 import { poseTrack, cameraTrack } from './track.js';
 import { createHid, createGamepad } from './stream.js';
-import { loadImage, createVideo, raster } from './media.js';
+import { loadImage, createVideo, raster, loadModel } from './media.js';
 import { createLabels } from './labels.js';
 import { createOrbit } from './orbit.js';
 
@@ -57,7 +57,7 @@ export { PointerRouter } from './router.js';
 export { cameraHelm, poseHelm, helmBasis } from './helm.js';
 export { poseTrack, cameraTrack, TrackHandles } from './track.js';
 export { createHid, createGamepad, decodeSpaceNavigator, HID_FILTERS, GAMEPAD_MAP } from './stream.js';
-export { loadImage, createVideo, raster } from './media.js';
+export { loadImage, createVideo, raster, loadModel } from './media.js';
 export { createLabels } from './labels.js';
 export { createOrbit } from './orbit.js';
 
@@ -137,6 +137,8 @@ export function createHost(canvas, opts) {
     video(opts) { return host.register(createVideo(opts)); },
     /** Draw through a 2D context into a texture source — see host/media. */
     raster(draw, w, h, opts) { return raster(draw, w, h, opts); },
+    /** Fetch an OBJ model into the arrays shape — see host/media. */
+    model(url, opts) { return loadModel(url, opts); },
     /**
      * The label layer — see host/labels. Created on first access, so a
      * canvas that never labels never gets a layer nor a repositioned parent.

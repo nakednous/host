@@ -1,11 +1,11 @@
 /**
- * @file media tests — image, video and raster against stubbed fetch,
+ * @file media tests — image, video, raster and model against stubbed fetch,
  *       document and media devices.
  */
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadImage, createVideo, raster, createHost } from '../src/index.js';
+import { loadImage, createVideo, raster, loadModel, createHost } from '../src/index.js';
 import { createCanvas, createElement, installDocument } from './dom.js';
 
 test('loadImage: fetches the blob and decodes it into a bitmap; a bad status throws', async () => {
@@ -19,6 +19,29 @@ test('loadImage: fetches the blob and decodes it into a bitmap; a bad status thr
     assert.equal((await loadImage('b.png')).opts, undefined);
     await assert.rejects(loadImage('nope'), /404/);
   } finally { delete globalThis.fetch; delete globalThis.createImageBitmap; }
+});
+
+test('loadModel: fetches OBJ text into the arrays shape; normal and texcoord only when present; a bad status throws', async () => {
+  const quad = 'v 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\nvt 0 0\nvt 1 0\nvt 1 1\nvt 0 1\nvn 0 0 1\nf 1/1/1 2/2/1 3/3/1 4/4/1\n';
+  const bare = 'v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n';
+  const calls = [];
+  globalThis.fetch = async (url, init) => { calls.push([url, init]); return { ok: url !== 'nope', status: url === 'nope' ? 404 : 200, text: async () => (url === 'quad.obj' ? quad : bare) }; };
+  try {
+    const m = await loadModel('quad.obj', { fetch: { mode: 'cors' } });
+    assert.deepEqual(calls[0], ['quad.obj', { mode: 'cors' }]);
+    assert.deepEqual(Object.keys(m).sort(), ['indices', 'normal', 'position', 'texcoord']);
+    assert.ok(m.position.data instanceof Float32Array);
+    assert.deepEqual([...m.position.data], [0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0]);
+    assert.ok(m.indices.data instanceof Uint32Array);
+    assert.deepEqual([...m.indices.data], [0, 1, 2, 2, 3, 0]);
+    assert.deepEqual([...m.normal.data], [0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1]);
+    assert.equal(m.texcoord.numComponents, 2);
+    assert.deepEqual([...m.texcoord.data], [0, 0, 1, 0, 1, 1, 0, 1]);
+    const b = await loadModel('bare.obj');
+    assert.deepEqual(Object.keys(b).sort(), ['indices', 'position']);
+    assert.equal(b.position.data.length / 3, 3);
+    await assert.rejects(loadModel('nope'), /404/);
+  } finally { delete globalThis.fetch; }
 });
 
 test('video: a src source is hidden, muted, looping; ready resolves at loadedmetadata and autoplays', async () => {
