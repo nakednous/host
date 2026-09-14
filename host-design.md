@@ -1,7 +1,7 @@
 # `host` — DOM transport (design)
 
 > Target: `@nakednous/host` 0.0.1 on `@nakednous/tree` 0.0.28+ (the core additions:
-> `camera.js`, `unproject`, the analytic proxies). Consumers: `twgl.tree`, `webgpu.tree`,
+> `camera.js`, `unproject`, the analytic proxies). Consumers: `webgl.tree`, `webgpu.tree`,
 > and later the `p5.tree` adapter. The apex is `stack-design.md` in the tree repo; this doc
 > owns the host's surface at implementation depth.
 > Status: **design only** — no code. Names marked *(provisional)* are open to veto. The
@@ -34,7 +34,7 @@ must adopt (the loop is optional; the players are tickable from outside).
                    loop, handles + router, helm + track factories, streams, media,
                    labels, orbit, canvas observer
        ↑
-twgl.tree · webgpu.tree · (p5.tree adapter)
+webgl.tree · webgpu.tree · (p5.tree adapter)
 ```
 
 `tree ← host`; host never imports ui; nothing flows back. A bridge takes the host as an

@@ -6,7 +6,7 @@ device streams (WebHID, Gamepad), image and video sources, a DOM label overlay a
 **zero renderer**, pure vanilla DOM.
 
 > **Status: 0.0.x.** The whole surface below is shipped. What a bridge draws (a handle's locus,
-> a track's path, a helm's rig) lives in `twgl.tree` / `p5.tree`; the host only computes, through
+> a track's path, a helm's rig) lives in `webgl.tree` / `p5.tree`; the host only computes, through
 > `@nakednous/tree`, and listens.
 
 ---
@@ -46,7 +46,7 @@ WebGL or WebGPU — it owns a canvas element's input and the frame clock, and ha
   application
       │
       ▼
-  twgl.tree · webgpu.tree     ← bridge: the GPU, thinly
+  webgl.tree · webgpu.tree    ← bridge: the GPU, thinly
       │
       ├── @nakednous/host     ← this package: pointer, handles, tracks, helms, players, streams, media, labels, orbit
       │        │
