@@ -42,7 +42,7 @@
     "url": "git+https://github.com/nakednous/host.git"
   },
   "dependencies": {
-    "@nakednous/tree": "^0.0.28"
+    "@nakednous/tree": "^0.0.29"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^29.0.3",
