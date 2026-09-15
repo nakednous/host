@@ -4,7 +4,7 @@
  * @license AGPL-3.0-only
  *
  * A model arrives as arrays for a bridge's buffer upload: loadModel fetches an
- * OBJ file and adapts webgl-obj-loader's mesh, no parser of its own.
+ * OBJ file and parses it (host/obj).
  *
  * What a texture upload reads from: an ImageBitmap fetched from a URL, a
  * hidden <video> element from a file or the user's camera, a bitmap drawn
@@ -16,7 +16,7 @@
 
 'use strict';
 
-import OBJ from 'webgl-obj-loader';
+import { parseObj } from './obj.js';
 
 /**
  * Fetch an image into an ImageBitmap.
@@ -39,8 +39,8 @@ export async function loadImage(url, opts) {
  * and texcoord when the file carries them. twgl's createBufferInfoFromArrays
  * takes the result as it is.
  *
- * Parsing is webgl-obj-loader's: faces are triangulated and each distinct
- * position / uv / normal triple becomes one vertex. Materials are ignored.
+ * Faces are triangulated and each distinct position / uv / normal triple
+ * becomes one vertex. Materials are ignored.
  *
  * @param {string} url
  * @param {{ fetch?:object }} [opts]  fetch: the fetch init (credentials, mode, …).
@@ -53,16 +53,7 @@ export async function loadModel(url, opts) {
   const o = opts || {};
   const res = await fetch(url, o.fetch);
   if (!res.ok) throw new Error('[host] model: ' + url + ' → ' + res.status);
-  const mesh = new OBJ.Mesh(await res.text());
-  const out = {
-    position: { numComponents: 3, data: new Float32Array(mesh.vertices) },
-    indices: { numComponents: 3, data: new Uint32Array(mesh.indices) },
-  };
-  // a file without normals leaves the loader's normals unset, one per component
-  const n = mesh.vertexNormals;
-  if (n.length && n.every(Number.isFinite)) out.normal = { numComponents: 3, data: new Float32Array(n) };
-  if (mesh.textures.length) out.texcoord = { numComponents: mesh.textureStride, data: new Float32Array(mesh.textures) };
-  return out;
+  return parseObj(await res.text());
 }
 
 /**
