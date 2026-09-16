@@ -23,7 +23,7 @@ function rig(opts) {
   const down = (id, x, y) => canvas.dispatch('pointerdown', { pointerId: id, clientX: x, clientY: y });
   const move = (id, x, y) => canvas.dispatch('pointermove', { pointerId: id, clientX: x, clientY: y });
   const up = (id) => canvas.dispatch('pointerup', { pointerId: id, clientX: 0, clientY: 0 });
-  const frame = () => { const m = orbit.update(); host.pointer.flush(); return m; };
+  const frame = (dt) => { const m = orbit.update(dt); host.pointer.flush(); return m; };
   return { canvas, host, cam, orbit, down, move, up, frame };
 }
 
@@ -144,5 +144,66 @@ test('orbit: the wheel dollies with exp(deltaY / 1000), lines scale by 16, clamp
   canvas.dispatch('wheel', { deltaY: 100, deltaMode: 0 });
   assert.equal(frame(), false);
   near(cam.eye[2], 2);
+  host.dispose();
+});
+
+const DT = 1 / 60;
+const azOf = (cam) => Math.atan2(cam.eye[0], cam.eye[2]);   // the eye's azimuth about +Y, from [0, 0, 10]
+
+test('orbit: inertia coasts a flick with the release rate over the last 100 ms, v · tau in all', () => {
+  const { cam, orbit, down, move, up, frame, host } = rig({ rotate: 0.01, inertia: 0.5 });
+  down(1, 100, 100); frame(DT);
+  move(1, 200, 100);                                   // −1 rad in one frame: 30 rad/s over the press and the move
+  assert.equal(frame(DT), true);
+  near(azOf(cam), -1);
+  up(1);
+  assert.equal(frame(DT), true);                       // the release frame already coasts
+  const v0 = -1 / (2 * DT), tau = 0.5;
+  near(azOf(cam), -1 + v0 * tau * (1 - Math.exp(-DT / tau)), 1e-6);
+  let n = 0;
+  while (frame(DT)) n++;                               // the coast ends on its own
+  assert.ok(n > 100 && n < 2000, `${n} frames`);
+  const total = -1 + v0 * tau;                         // −16 rad, wrapped
+  near(Math.sin(azOf(cam)), Math.sin(total), 1e-3);
+  near(Math.cos(azOf(cam)), Math.cos(total), 1e-3);
+  host.dispose();
+});
+
+test('orbit: a finger that stops before lifting does not coast; a press cancels a coast; home ends it', () => {
+  const { cam, orbit, down, move, up, frame, host } = rig({ rotate: 0.01, inertia: 0.5 });
+  down(1, 100, 100); frame(DT);
+  move(1, 200, 100); frame(DT);
+  for (let i = 0; i < 8; i++) frame(DT);               // still for 133 ms: the window holds only zeros
+  up(1);
+  assert.equal(frame(DT), false);
+  near(azOf(cam), -1);
+  down(1, 200, 100); frame(DT);
+  move(1, 250, 100); frame(DT);                        // −0.5 rad flick
+  up(1); frame(DT);
+  assert.equal(frame(DT), true);                       // coasting
+  const mid = azOf(cam);
+  down(1, 250, 100);
+  assert.equal(frame(DT), false);                      // the press cancels: nothing moves
+  near(azOf(cam), mid);
+  up(1); frame(DT);
+  assert.equal(frame(DT), false);                      // no flick this time
+  orbit.home();
+  near3(cam.eye, [0, 0, 10]);
+  assert.equal(frame(DT), false);
+  host.dispose();
+});
+
+test('orbit: the wheel joins the coast as an impulse with the exact dolly\'s travel; inertia 0 stays exact', () => {
+  const { canvas, cam, orbit, frame, host } = rig({ inertia: 0.5 });
+  canvas.dispatch('wheel', { deltaY: 100, deltaMode: 0 });
+  assert.equal(frame(DT), true);
+  assert.ok(cam.eye[2] > 10 && cam.eye[2] < 10 * Math.exp(0.1));   // under way, not there yet
+  while (frame(DT));
+  near(cam.eye[2], 10 * Math.exp(0.1), 1e-3);
+  orbit.inertia = 0;
+  canvas.dispatch('wheel', { deltaY: -100, deltaMode: 0 });
+  assert.equal(frame(DT), true);
+  near(cam.eye[2], 10, 1e-3);                          // exact, in one frame
+  assert.equal(frame(DT), false);
   host.dispose();
 });
