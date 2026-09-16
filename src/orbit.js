@@ -14,18 +14,14 @@
  * Two-pointer motion is computed from the pointers' own coordinates, never
  * from a browser's pinch synthesis, so it reads the same on every platform;
  * the canvas gets touch-action: none while the orbit lives so the browser
- * does not scroll or zoom the page instead. Two time constants, seconds,
- * both 0 by default — exact, as direct manipulation wants. `damping` makes
- * the camera trail the gesture through a first-order lag: each step of a
- * drag — orbit, pan and dolly lanes — and each wheel notch is an impulse the
- * camera drains with that time constant through tree's coast, so it follows
- * the finger about `damping` behind and, after a release, travels the rest
- * of what the finger did and no more. `inertia` adds a flick: at release the
- * fastest step of the last 200 ms seeds a second rate drained with that
- * constant, so the travel is the peak speed times `inertia` — the peak, not
- * the average, so a mouse whose hand stops just before the button lifts
- * still flicks. A fresh touch drops whatever is still draining, so do
- * home() and enabled = false.
+ * does not scroll or zoom the page instead. `damping`, seconds, makes the
+ * camera trail the gesture through a first-order lag: each step of a drag —
+ * orbit, pan and dolly lanes — and each wheel notch is an impulse the camera
+ * drains with that time constant through tree's coast, so it follows the
+ * finger about `damping` behind and, after a release, travels the rest of
+ * what the finger did and no more, a flick easing out. A fresh touch drops
+ * what is still draining, so do home() and enabled = false. 0, the default,
+ * keeps the orbit exact: direct manipulation wants exactness.
  *
  * Screen y runs down; which world direction that is depends on the
  * projection installed in the view bag: a y-up projection (GL's, tree's
@@ -42,23 +38,19 @@ const _clamp = { min: 0, max: Infinity };
 const _now = () => (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
 const EPS = 1e-4;        // a rate below this in every lane ends the drain
 const DT_MAX = 0.1;      // seconds, the measured frame's clamp
-const WINDOW = 0.2;      // seconds of gesture the flick's peak is taken from
-const RING = 64;         // steps remembered: the window at 240 Hz, with room
-const LANES = 8;         // t, dt, pointer speed (px/s), dAz, dEl, panX, panY, log dolly
 
 /**
  * Create an orbit on a camera state.
  *
  * @param {object} host
  * @param {object} cam  The camera state written.
- * @param {{ rotate?:number, pan?:number, zoom?:number, wheel?:number, damping?:number, inertia?:number,
+ * @param {{ rotate?:number, pan?:number, zoom?:number, wheel?:number, damping?:number,
  *           minDistance?:number, maxDistance?:number, enabled?:boolean }} [opts]
  *        rotate: radians per pixel (default 0.005). pan / zoom / wheel:
  *        scalars on the two-pointer pan, the pinch and the wheel dolly
- *        (default 1). damping: the lag's time constant in seconds; inertia:
- *        the flick's (both default 0, exact). minDistance / maxDistance:
- *        gaze-distance clamps.
- * @returns {object} The orbit: { cam, enabled, rotate, pan, zoom, wheel, damping, inertia,
+ *        (default 1). damping: the lag's time constant in seconds (default
+ *        0, exact). minDistance / maxDistance: gaze-distance clamps.
+ * @returns {object} The orbit: { cam, enabled, rotate, pan, zoom, wheel, damping,
  *          minDistance, maxDistance, update(dt), home(), dispose() }.
  */
 export function createOrbit(host, cam, opts) {
@@ -67,34 +59,11 @@ export function createOrbit(host, cam, opts) {
   const home = cameraCopy(createCamera(), cam);
   const tracked = new Map();   // pointer id → { x, y } as last consumed
   let wheelAcc = 0;
-  const rate = [0, 0, 0, 0, 0];           // the lag, still draining: dAz, dEl, panX, panY, log dolly — per second
-  const flick = [0, 0, 0, 0, 0];          // the flick, still draining: the same lanes
-  const step = [0, 0, 0, 0, 0];           // one frame of either
-  const ring = new Float64Array(RING * LANES);   // the drag's recent steps, stamped, for the flick's peak
-  let ringHead = 0, ringCount = 0;
-  let clock = 0, lastNow = 0, wasPressed = false;
+  const rate = [0, 0, 0, 0, 0];           // what is still draining: dAz, dEl, panX, panY, log dolly — per second
+  const step = [0, 0, 0, 0, 0];           // one frame of it
+  let lastNow = 0, wasPressed = false;
 
-  const cancel = () => { for (let i = 0; i < 5; i++) rate[i] = flick[i] = 0; ringCount = 0; };
-  const remember = (t, dt, speed, az, el, px, py, ld) => {
-    const i = ringHead * LANES;
-    ring[i] = t; ring[i + 1] = dt; ring[i + 2] = speed;
-    ring[i + 3] = az; ring[i + 4] = el; ring[i + 5] = px; ring[i + 6] = py; ring[i + 7] = ld;
-    ringHead = (ringHead + 1) % RING;
-    if (ringCount < RING) ringCount++;
-  };
-  // the flick: the window's fastest step, as a rate
-  const seed = (t) => {
-    let best = -1, speed = 0;
-    for (let k = 0; k < ringCount; k++) {
-      const i = ((ringHead - 1 - k + RING) % RING) * LANES;
-      if (t - ring[i] > WINDOW) break;
-      if (ring[i + 2] > speed && ring[i + 1] > 0) { speed = ring[i + 2]; best = i; }
-    }
-    ringCount = 0;
-    if (best < 0) return;
-    const dt = ring[best + 1];
-    for (let i = 0; i < 5; i++) flick[i] += ring[best + 3 + i] / dt;
-  };
+  const cancel = () => { for (let i = 0; i < 5; i++) rate[i] = 0; };
   const apply = (s) => {
     if (s[0] !== 0 || s[1] !== 0) cameraOrbit(cam, s[0], s[1]);
     if (s[2] !== 0 || s[3] !== 0) cameraPan(cam, s[2], s[3]);
@@ -137,10 +106,8 @@ export function createOrbit(host, cam, opts) {
     zoom: o.zoom ?? 1,
     /** Scalar on the wheel dolly. */
     wheel: o.wheel ?? 1,
-    /** The lag's time constant, seconds; 0 keeps the drag exact. */
+    /** The lag's time constant, seconds; 0 keeps the orbit exact. */
     damping: o.damping ?? 0,
-    /** The flick's time constant, seconds; 0 means no flick. */
-    inertia: o.inertia ?? 0,
     /** Gaze-distance clamps for every dolly. */
     minDistance: o.minDistance ?? 0,
     maxDistance: o.maxDistance ?? Infinity,
@@ -155,7 +122,6 @@ export function createOrbit(host, cam, opts) {
       const now = _now();
       if (typeof dt !== 'number') dt = lastNow ? Math.min((now - lastNow) / 1000, DT_MAX) : 0;
       lastNow = now;
-      clock += dt;
       if (!orbit.enabled) { tracked.clear(); wheelAcc = 0; cancel(); wasPressed = false; return false; }
       const src = host.pointer;
       let a = null, b = null;
@@ -169,18 +135,18 @@ export function createOrbit(host, cam, opts) {
         if ((a === null || id !== a.id) && (b === null || id !== b.id)) tracked.delete(id);
       }
       const tau = orbit.damping > 0 ? orbit.damping : 0;
-      const tauFlick = orbit.inertia > 0 ? orbit.inertia : 0;
       const pressed = a !== null;
       if (pressed && !wasPressed) cancel();         // a fresh touch catches the scene: what was still draining is dropped
+      wasPressed = pressed;
       let moved = false;
-      let az = 0, el = 0, px = 0, py = 0, ld = 0, speed = 0;   // this frame's step, and the pointer's speed for the flick's peak
+      let az = 0, el = 0, px = 0, py = 0, ld = 0;   // this frame's step
       const view = host.view;
       const ys = view.mat4Proj[5] < 0 ? -1 : 1;   // screen-down is the eye's −up under a y-up projection, +up under p5's flip
       if (a !== null && b === null) {
         const t = tracked.get(a.id);
         if (t) {
           const dx = a.x - t.x, dy = a.y - t.y;
-          if (dx !== 0 || dy !== 0) { az = -dx * orbit.rotate; el = ys * dy * orbit.rotate; speed = Math.hypot(dx, dy); }
+          if (dx !== 0 || dy !== 0) { az = -dx * orbit.rotate; el = ys * dy * orbit.rotate; }
         }
         track(a);
       } else if (a !== null && b !== null) {
@@ -193,7 +159,6 @@ export function createOrbit(host, cam, opts) {
           }
           const d0 = Math.hypot(ta.x - tb.x, ta.y - tb.y), d1 = Math.hypot(a.x - b.x, a.y - b.y);
           if (d0 > 0 && d1 > 0 && d0 !== d1) ld = orbit.zoom * Math.log(d0 / d1);
-          speed = Math.hypot(dmx, dmy) + Math.abs(d1 - d0);
         }
         track(a); track(b);
       }
@@ -202,11 +167,6 @@ export function createOrbit(host, cam, opts) {
         if (tau > 0) { rate[0] += az / tau; rate[1] += el / tau; rate[2] += px / tau; rate[3] += py / tau; rate[4] += ld / tau; }
         else { step[0] = az; step[1] = el; step[2] = px; step[3] = py; step[4] = ld; apply(step); moved = true; }
       }
-      if (tauFlick > 0) {
-        if (pressed) remember(clock, dt, dt > 0 ? speed / dt : 0, az, el, px, py, ld);
-        else if (wasPressed) seed(clock);
-      }
-      wasPressed = pressed;
       if (wheelAcc !== 0) {
         const w = wheelAcc * 0.001 * orbit.wheel;
         wheelAcc = 0;
@@ -214,7 +174,6 @@ export function createOrbit(host, cam, opts) {
         else { dolly(Math.exp(w)); moved = true; }
       }
       if (tau > 0 && coastAlive(rate, EPS)) { apply(coastStep(step, rate, dt, tau)); moved = true; }
-      if (tauFlick > 0 && coastAlive(flick, EPS)) { apply(coastStep(step, flick, dt, tauFlick)); moved = true; }
       return moved;
     },
 

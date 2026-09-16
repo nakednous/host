@@ -187,29 +187,6 @@ test('orbit: a fresh touch catches the scene where it is; home drops the drain',
   host.dispose();
 });
 
-test('orbit: inertia flicks with the fastest step of the last 200 ms, even after a short stop; a long hold does not', () => {
-  const { cam, down, move, up, frame, host } = rig({ rotate: 0.01, inertia: 0.5 });
-  down(1, 100, 100); frame(DT);
-  move(1, 200, 100);
-  assert.equal(frame(DT), true);                       // exact: no damping
-  near(azOf(cam), -1);
-  for (let i = 0; i < 8; i++) assert.equal(frame(DT), false);   // still for 133 ms, as a hand before a click release
-  up(1);
-  assert.equal(frame(DT), true);                       // the peak step, −1 rad in a frame, seeds the flick
-  let n = 0;
-  while (frame(DT)) n++;
-  assert.ok(n > 100 && n < 2000, `${n} frames`);
-  const total = -1 + (-1 / DT) * 0.5;                  // the peak speed times inertia
-  near(Math.sin(azOf(cam)), Math.sin(total), 1e-3);
-  near(Math.cos(azOf(cam)), Math.cos(total), 1e-3);
-  down(1, 200, 100); frame(DT);
-  move(1, 250, 100); frame(DT);
-  for (let i = 0; i < 15; i++) frame(DT);              // held 250 ms: the window holds no step
-  up(1);
-  assert.equal(frame(DT), false);
-  host.dispose();
-});
-
 test('orbit: the wheel dollies through the lag with the exact dolly\'s travel; damping 0 stays exact', () => {
   const { canvas, cam, orbit, frame, host } = rig({ damping: 0.5 });
   canvas.dispatch('wheel', { deltaY: 100, deltaMode: 0 });
