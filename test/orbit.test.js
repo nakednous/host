@@ -19,7 +19,7 @@ function rig(opts) {
   const host = createHost(canvas);
   const cam = createCamera({ eye: [0, 0, 10], center: [0, 0, 0], up: [0, 1, 0], fov: Math.PI / 2, near: 1, far: 100 });
   host.view.setCamera(cam);
-  const orbit = host.orbit(cam, opts);
+  const orbit = host.orbit(cam, Object.assign({ damping: 0 }, opts));   // exact unless a test asks
   const down = (id, x, y) => canvas.dispatch('pointerdown', { pointerId: id, clientX: x, clientY: y });
   const move = (id, x, y) => canvas.dispatch('pointermove', { pointerId: id, clientX: x, clientY: y });
   const up = (id) => canvas.dispatch('pointerup', { pointerId: id, clientX: 0, clientY: 0 });
@@ -149,6 +149,14 @@ test('orbit: the wheel dollies with exp(deltaY / 1000), lines scale by 16, clamp
 
 const DT = 1 / 60;
 const azOf = (cam) => Math.atan2(cam.eye[0], cam.eye[2]);   // the eye's azimuth about +Y, from [0, 0, 10]
+
+test('orbit: damping defaults to 0.2 s', () => {
+  const { host } = rig();
+  const cam = createCamera();
+  assert.equal(host.orbit(cam).damping, 0.2);
+  assert.equal(host.orbit(cam, { damping: 0 }).damping, 0);
+  host.dispose();
+});
 
 test('orbit: damping trails the drag by its time constant and completes it after release, no more', () => {
   const { cam, down, move, up, frame, host } = rig({ rotate: 0.01, damping: 0.5 });

@@ -20,8 +20,8 @@
  * drains with that time constant through tree's coast, so it follows the
  * finger about `damping` behind and, after a release, travels the rest of
  * what the finger did and no more, a flick easing out. A fresh touch drops
- * what is still draining, so do home() and enabled = false. 0, the default,
- * keeps the orbit exact: direct manipulation wants exactness.
+ * what is still draining, so do home() and enabled = false. The default is
+ * 0.2 s; 0 makes the orbit exact.
  *
  * Screen y runs down; which world direction that is depends on the
  * projection installed in the view bag: a y-up projection (GL's, tree's
@@ -49,7 +49,7 @@ const DT_MAX = 0.1;      // seconds, the measured frame's clamp
  *        rotate: radians per pixel (default 0.005). pan / zoom / wheel:
  *        scalars on the two-pointer pan, the pinch and the wheel dolly
  *        (default 1). damping: the lag's time constant in seconds (default
- *        0, exact). minDistance / maxDistance: gaze-distance clamps.
+ *        0.2; 0 exact). minDistance / maxDistance: gaze-distance clamps.
  * @returns {object} The orbit: { cam, enabled, rotate, pan, zoom, wheel, damping,
  *          minDistance, maxDistance, update(dt), home(), dispose() }.
  */
@@ -106,8 +106,8 @@ export function createOrbit(host, cam, opts) {
     zoom: o.zoom ?? 1,
     /** Scalar on the wheel dolly. */
     wheel: o.wheel ?? 1,
-    /** The lag's time constant, seconds; 0 keeps the orbit exact. */
-    damping: o.damping ?? 0,
+    /** The lag's time constant, seconds; 0 makes the orbit exact. */
+    damping: o.damping ?? 0.2,
     /** Gaze-distance clamps for every dolly. */
     minDistance: o.minDistance ?? 0,
     maxDistance: o.maxDistance ?? Infinity,
