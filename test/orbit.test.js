@@ -150,57 +150,51 @@ test('orbit: the wheel dollies with exp(deltaY / 1000), lines scale by 16, clamp
 const DT = 1 / 60;
 const azOf = (cam) => Math.atan2(cam.eye[0], cam.eye[2]);   // the eye's azimuth about +Y, from [0, 0, 10]
 
-test('orbit: inertia coasts a flick with the release rate over the last 100 ms, v · tau in all', () => {
-  const { cam, orbit, down, move, up, frame, host } = rig({ rotate: 0.01, inertia: 0.5 });
+test('orbit: damping trails the drag by its time constant and completes it after release, no more', () => {
+  const { cam, down, move, up, frame, host } = rig({ rotate: 0.01, damping: 0.5 });
+  const tau = 0.5;
   down(1, 100, 100); frame(DT);
-  move(1, 200, 100);                                   // −1 rad in one frame: 30 rad/s over the press and the move
+  move(1, 200, 100);                                   // −1 rad asked for
   assert.equal(frame(DT), true);
-  near(azOf(cam), -1);
+  near(azOf(cam), -(1 - Math.exp(-DT / tau)), 1e-6);   // one frame of the lag
+  assert.equal(frame(DT), true);                       // still pressed, still draining
+  near(azOf(cam), -(1 - Math.exp(-2 * DT / tau)), 1e-6);
   up(1);
-  assert.equal(frame(DT), true);                       // the release frame already coasts
-  const v0 = -1 / (2 * DT), tau = 0.5;
-  near(azOf(cam), -1 + v0 * tau * (1 - Math.exp(-DT / tau)), 1e-6);
   let n = 0;
-  while (frame(DT)) n++;                               // the coast ends on its own
+  while (frame(DT)) n++;                               // the drain ends on its own
   assert.ok(n > 100 && n < 2000, `${n} frames`);
-  const total = -1 + v0 * tau;                         // −16 rad, wrapped
-  near(Math.sin(azOf(cam)), Math.sin(total), 1e-3);
-  near(Math.cos(azOf(cam)), Math.cos(total), 1e-3);
+  near(azOf(cam), -1, 1e-3);                           // the drag's own travel, nothing beyond
   host.dispose();
 });
 
-test('orbit: a finger that stops before lifting does not coast; a press cancels a coast; home ends it', () => {
-  const { cam, orbit, down, move, up, frame, host } = rig({ rotate: 0.01, inertia: 0.5 });
+test('orbit: a fresh touch catches the scene where it is; home drops the drain', () => {
+  const { cam, orbit, down, move, up, frame, host } = rig({ rotate: 0.01, damping: 0.5 });
   down(1, 100, 100); frame(DT);
   move(1, 200, 100); frame(DT);
-  for (let i = 0; i < 8; i++) frame(DT);               // still for 133 ms: the window holds only zeros
-  up(1);
-  assert.equal(frame(DT), false);
-  near(azOf(cam), -1);
-  down(1, 200, 100); frame(DT);
-  move(1, 250, 100); frame(DT);                        // −0.5 rad flick
   up(1); frame(DT);
-  assert.equal(frame(DT), true);                       // coasting
+  assert.equal(frame(DT), true);                       // draining after the release
   const mid = azOf(cam);
-  down(1, 250, 100);
-  assert.equal(frame(DT), false);                      // the press cancels: nothing moves
+  down(1, 200, 100);
+  assert.equal(frame(DT), false);                      // caught: nothing moves
   near(azOf(cam), mid);
   up(1); frame(DT);
-  assert.equal(frame(DT), false);                      // no flick this time
+  assert.equal(frame(DT), false);
+  down(1, 200, 100); frame(DT);
+  move(1, 250, 100); frame(DT);
   orbit.home();
   near3(cam.eye, [0, 0, 10]);
-  assert.equal(frame(DT), false);
+  assert.equal(frame(DT), false);                      // home dropped what the drag had left to drain
   host.dispose();
 });
 
-test('orbit: the wheel joins the coast as an impulse with the exact dolly\'s travel; inertia 0 stays exact', () => {
-  const { canvas, cam, orbit, frame, host } = rig({ inertia: 0.5 });
+test('orbit: the wheel dollies through the lag with the exact dolly\'s travel; damping 0 stays exact', () => {
+  const { canvas, cam, orbit, frame, host } = rig({ damping: 0.5 });
   canvas.dispatch('wheel', { deltaY: 100, deltaMode: 0 });
   assert.equal(frame(DT), true);
   assert.ok(cam.eye[2] > 10 && cam.eye[2] < 10 * Math.exp(0.1));   // under way, not there yet
   while (frame(DT));
   near(cam.eye[2], 10 * Math.exp(0.1), 1e-3);
-  orbit.inertia = 0;
+  orbit.damping = 0;
   canvas.dispatch('wheel', { deltaY: -100, deltaMode: 0 });
   assert.equal(frame(DT), true);
   near(cam.eye[2], 10, 1e-3);                          // exact, in one frame
