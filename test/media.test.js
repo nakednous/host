@@ -7,6 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadImage, createVideo, raster, loadModel, createHost } from '../src/index.js';
 import { createCanvas, createElement, installDocument } from './dom.js';
+import { document as gltfDocument, glb } from './gltf.fixture.js';
 
 test('loadImage: fetches the blob and decodes it into a bitmap; a bad status throws', async () => {
   const calls = [];
@@ -21,14 +22,20 @@ test('loadImage: fetches the blob and decodes it into a bitmap; a bad status thr
   } finally { delete globalThis.fetch; delete globalThis.createImageBitmap; }
 });
 
-test('loadModel: fetches OBJ text into the arrays shape; normal and texcoord only when present; a bad status throws', async () => {
+test('loadModel: an OBJ file is one white mesh under one identity node; normal and texcoord only when present; a bad status throws', async () => {
   const quad = 'v 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\nvt 0 0\nvt 1 0\nvt 1 1\nvt 0 1\nvn 0 0 1\nf 1/1/1 2/2/1 3/3/1 4/4/1\n';
   const bare = 'v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n';
   const calls = [];
-  globalThis.fetch = async (url, init) => { calls.push([url, init]); return { ok: url !== 'nope', status: url === 'nope' ? 404 : 200, text: async () => (url === 'quad.obj' ? quad : bare) }; };
+  globalThis.fetch = async (url, init) => { calls.push([url, init]); return { ok: url !== 'nope.obj', status: url === 'nope.obj' ? 404 : 200, text: async () => (url === 'quad.obj' ? quad : bare) }; };
   try {
-    const m = await loadModel('quad.obj', { fetch: { mode: 'cors' } });
+    const model = await loadModel('quad.obj', { fetch: { mode: 'cors' } });
     assert.deepEqual(calls[0], ['quad.obj', { mode: 'cors' }]);
+    assert.deepEqual(Object.keys(model), ['meshes', 'nodes', 'skins', 'clips']);
+    assert.equal(model.meshes.length, 1);
+    const { arrays: m, ...rest } = model.meshes[0];
+    assert.deepEqual(rest, { name: '', node: 0, skin: -1, targets: [], color: [1, 1, 1, 1] });
+    assert.deepEqual(model.nodes, { names: [''], parents: Int32Array.of(-1), rest: Float32Array.of(0, 0, 0, 0, 0, 0, 1, 1, 1, 1) });
+    assert.deepEqual(model.skins, []); assert.deepEqual(model.clips, []);
     assert.deepEqual(Object.keys(m).sort(), ['indices', 'normal', 'position', 'texcoord']);
     assert.ok(m.position.data instanceof Float32Array);
     assert.deepEqual([...m.position.data], [0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0]);
@@ -37,10 +44,30 @@ test('loadModel: fetches OBJ text into the arrays shape; normal and texcoord onl
     assert.deepEqual([...m.normal.data], [0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1]);
     assert.equal(m.texcoord.numComponents, 2);
     assert.deepEqual([...m.texcoord.data], [0, 0, 1, 0, 1, 1, 0, 1]);
-    const b = await loadModel('bare.obj');
+    const b = (await loadModel('bare.obj?v=2')).meshes[0].arrays;
     assert.deepEqual(Object.keys(b).sort(), ['indices', 'position']);
     assert.equal(b.position.data.length / 3, 3);
-    await assert.rejects(loadModel('nope'), /404/);
+    await assert.rejects(loadModel('nope.obj'), /404/);
+    await assert.rejects(loadModel('model.stl'), /unknown format/);
+    assert.equal((await loadModel('blob:1234', { format: 'obj' })).meshes.length, 1);
+  } finally { delete globalThis.fetch; }
+});
+
+test('loadModel: a .glb and a .gltf with its buffer arrive in the same shape', async () => {
+  const { json, bin } = gltfDocument();
+  const calls = [];
+  globalThis.fetch = async (url) => {
+    calls.push(url);
+    return { ok: true, status: 200, json: async () => json, arrayBuffer: async () => (/\.glb$/.test(url) ? glb(json, bin) : bin) };
+  };
+  try {
+    const a = await loadModel('https://x.test/models/tri.glb');
+    json.buffers[0].uri = 'tri.bin';
+    const b = await loadModel('https://x.test/models/tri.gltf');
+    assert.deepEqual(calls, ['https://x.test/models/tri.glb', 'https://x.test/models/tri.gltf', 'https://x.test/models/tri.bin']);
+    assert.deepEqual(a, b);
+    assert.deepEqual(Object.keys(a), ['meshes', 'nodes', 'skins', 'clips']);
+    assert.equal(a.meshes[0].skin, 0); assert.equal(a.clips[0].name, 'Slide');
   } finally { delete globalThis.fetch; }
 });
 

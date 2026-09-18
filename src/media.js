@@ -1,10 +1,11 @@
 /**
- * @file Media sources — images, video and Canvas2D rasters for a bridge's textures, OBJ models for its buffers.
+ * @file Media sources — images, video and Canvas2D rasters for a bridge's textures, models for its buffers.
  * @module host/media
  * @license AGPL-3.0-only
  *
- * A model arrives as arrays for a bridge's buffer upload: loadModel fetches an
- * OBJ file and parses it (host/obj).
+ * A model arrives as arrays for a bridge's buffer upload, with its hierarchy,
+ * skins and clips beside them: loadModel fetches an OBJ file (host/obj) or a
+ * glTF 2.0 one (host/gltf) into one shape.
  *
  * What a texture upload reads from: an ImageBitmap fetched from a URL, a
  * hidden <video> element from a file or the user's camera, a bitmap drawn
@@ -17,6 +18,7 @@
 'use strict';
 
 import { parseObj } from './obj.js';
+import { parseGlb, parseGltf } from './gltf.js';
 
 /**
  * Fetch an image into an ImageBitmap.
@@ -35,25 +37,61 @@ export async function loadImage(url, opts) {
 }
 
 /**
- * Fetch an OBJ model into the arrays shape: position and indices, plus normal
- * and texcoord when the file carries them. twgl's createBufferInfoFromArrays
- * takes the result as it is.
+ * Fetch a model — OBJ, or glTF 2.0 as `.glb` or `.gltf` with its buffers —
+ * into one shape whatever the format:
  *
- * Faces are triangulated and each distinct position / uv / normal triple
- * becomes one vertex. Materials are ignored.
+ *   { meshes: [{ name, node, skin, arrays, targets, color }], nodes, skins, clips }
+ *
+ * `arrays` is the arrays shape — position, indices, and normal, tangent,
+ * texcoord, joints, weights when the file carries them — which twgl's
+ * createBufferInfoFromArrays takes as it is. `targets` are a mesh's morph
+ * targets as delta arrays, `color` its base colour [r,g,b,a], `node` the node
+ * it hangs from and `skin` its skin's index or −1. `nodes` is the hierarchy
+ * `{ names, parents, rest }`, parents first, `rest` a pose of ten numbers per
+ * node; `skins` are `{ name, joints, inverseBind }` and `clips` are `{ name,
+ * duration, channels }` — what tree's clipSample, poseWorld and jointPalette
+ * take. An OBJ file is one white mesh under one identity node, with no
+ * targets, skins or clips (host/obj); glTF is read by host/gltf.
  *
  * @param {string} url
- * @param {{ fetch?:object }} [opts]  fetch: the fetch init (credentials, mode, …).
- * @returns {Promise<{ position:{numComponents:number,data:Float32Array},
- *                     normal?:{numComponents:number,data:Float32Array},
- *                     texcoord?:{numComponents:number,data:Float32Array},
- *                     indices:{numComponents:number,data:Uint32Array} }>}
+ * @param {{ fetch?:object, format?:string }} [opts]  fetch: the fetch init
+ *        (credentials, mode, …). format: 'obj' | 'glb' | 'gltf' when the URL's
+ *        extension does not say.
+ * @returns {Promise<{ meshes:object[], nodes:{ names:string[], parents:Int32Array, rest:Float32Array },
+ *                     skins:object[], clips:object[] }>}
  */
 export async function loadModel(url, opts) {
   const o = opts || {};
-  const res = await fetch(url, o.fetch);
-  if (!res.ok) throw new Error('[host] model: ' + url + ' → ' + res.status);
-  return parseObj(await res.text());
+  const format = (o.format || (/\.(\w+)(?:[?#].*)?$/.exec(url) || [])[1] || '').toLowerCase();
+  if (format !== 'obj' && format !== 'glb' && format !== 'gltf') {
+    throw new Error('[host] model: ' + url + ' → unknown format; opts.format is one of obj, glb, gltf.');
+  }
+  const get = async (at) => {
+    const res = await fetch(at, o.fetch);
+    if (!res.ok) throw new Error('[host] model: ' + at + ' → ' + res.status);
+    return res;
+  };
+  const res = await get(url);
+  if (format === 'obj') {
+    return {
+      meshes: [{ name: '', node: 0, skin: -1, arrays: parseObj(await res.text()), targets: [], color: [1, 1, 1, 1] }],
+      nodes: { names: [''], parents: Int32Array.of(-1), rest: Float32Array.of(0, 0, 0, 0, 0, 0, 1, 1, 1, 1) },
+      skins: [],
+      clips: [],
+    };
+  }
+  if (format === 'glb') {
+    const { json, bin } = parseGlb(await res.arrayBuffer());
+    return parseGltf(json, [bin]);
+  }
+  const json = await res.json();
+  const base = typeof location !== 'undefined' ? new URL(url, location.href) : url;
+  const resolve = (uri) => {
+    if (/^data:/.test(uri)) return uri;
+    try { return String(new URL(uri, base)); } catch (e) { return url.replace(/[^/]*$/, '') + uri; }
+  };
+  const buffers = await Promise.all((json.buffers || []).map(async b => (await get(resolve(b.uri))).arrayBuffer()));
+  return parseGltf(json, buffers);
 }
 
 /**

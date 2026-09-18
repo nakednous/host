@@ -82,7 +82,7 @@ dependency first and an options object last, and registers with the context so
 | `host.poseTrack(opts)` · `host.cameraTrack(cam, opts)` | core tracks ticked while they play; `{ handles }` builds `TrackHandles`, one handle per keyframe |
 | `host.hid(opts)` · `host.gamepad(opts)` | rate streams — `lin[3]` / `ang[3]` in raw device units, `bind(helm)` feeds it each tick; `available`, `connected` |
 | `host.image(url)` · `host.video(opts)` · `host.raster(draw, w, h)` | texture sources — an `ImageBitmap`, a hidden `<video>` from a file or the camera with a `ready` promise, a Canvas2D drawing |
-| `host.model(url)` | an OBJ model as arrays — `{ position, normal?, texcoord?, indices }`, what twgl's `createBufferInfoFromArrays` takes; host's own parser (fan-triangulated faces, one vertex per distinct position / uv / normal triple), materials ignored |
+| `host.model(url)` | an OBJ or glTF 2.0 model (`.obj`, `.glb`, `.gltf`; `{ format }` when the URL does not say) in one shape: `{ meshes: [{ name, node, skin, arrays, targets, color }], nodes: { names, parents, rest }, skins: [{ name, joints, inverseBind }], clips: [{ name, duration, channels }] }`. `arrays` — `{ position, indices, normal?, tangent?, texcoord?, joints?, weights? }` — is what twgl's `createBufferInfoFromArrays` takes; `targets` are morph deltas; nodes come parents first with a rest pose, and with `skins` and `clips` feed tree's `clipSample` · `poseBlend` · `poseWorld` · `jointPalette` as they are. An OBJ file is one white mesh under one identity node. host's own parsers: no textures, cameras, sparse accessors or compressed geometry |
 | `host.labels` · `host.hasLabels` | the label layer, created on first access — `set(id, text, x, y, z, opts)` at a world anchor, `setScreen(id, text, sx, sy, opts)` in canvas px, `{ frame: true }` for a label that lives one frame, `tick()`; `hasLabels` probes without creating |
 | `host.orbit(cam, opts)` | the fall-through gesture — one pointer orbits, two pan and dolly, the wheel dollies; `damping` in seconds (default 0.2; 0 exact) makes the camera trail the gesture and complete it after release; `update(dt)` reports whether the camera moved; the vertical sense follows the bag's projection (y-up GL, y-flipped p5) |
 | `host.tick(dt)` | external-loop mode: tick the players; the caller flushes the pointer once its consumers ran |
@@ -153,6 +153,15 @@ npm run build     # rollup → dist/index.js
 ```
 
 ---
+
+## Acknowledgements
+
+- [glTF 2.0](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html) (Khronos Group) — the format `host/gltf` reads: the GLB container, accessors and buffer views, skins, morph targets, animations.
+- Wavefront OBJ — the format `host/obj` reads.
+- [three.js](https://threejs.org/) — the orbit's damping follows the shape of its `OrbitControls`, made time-based.
+- [twgl](https://twgljs.org/) — the arrays shape a model's meshes arrive in.
+
+Both parsers are host's own; no third-party code ships in the package.
 
 ## License
 
