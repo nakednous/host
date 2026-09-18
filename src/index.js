@@ -137,7 +137,7 @@ export function createHost(canvas, opts) {
     video(opts) { return host.register(createVideo(opts)); },
     /** Draw through a 2D context into a texture source — see host/media. */
     raster(draw, w, h, opts) { return raster(draw, w, h, opts); },
-    /** Fetch an OBJ or glTF model: meshes in the arrays shape, nodes, skins, clips — see host/media. */
+    /** Fetch an OBJ or glTF model: meshes in the arrays shape with their bounds, nodes, skins, clips — see host/media. */
     model(url, opts) { return loadModel(url, opts); },
     /**
      * The label layer — see host/labels. Created on first access, so a

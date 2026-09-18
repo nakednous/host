@@ -19,6 +19,7 @@
 
 import { parseObj } from './obj.js';
 import { parseGlb, parseGltf } from './gltf.js';
+import { meshNormals, meshBounds } from '@nakednous/tree';
 
 /**
  * Fetch an image into an ImageBitmap.
@@ -36,15 +37,31 @@ export async function loadImage(url, opts) {
   return o.bitmap ? createImageBitmap(blob, o.bitmap) : createImageBitmap(blob);
 }
 
+// Normals where a mesh lacks them, and every mesh's bounds; meshes sharing arrays share both.
+function _finish(model, o) {
+  const bounds = new Map();
+  for (const mesh of model.meshes) {
+    const a = mesh.arrays, p = a.position.data;
+    if (o.normals !== false && !a.normal) {
+      a.normal = { numComponents: 3, data: meshNormals(new Float32Array(p.length), p, a.indices.data) };
+    }
+    if (!bounds.has(a)) bounds.set(a, meshBounds({ min: [0, 0, 0], max: [0, 0, 0], center: [0, 0, 0], diag: 0 }, p));
+    mesh.bounds = bounds.get(a);
+  }
+  return model;
+}
+
 /**
  * Fetch a model — OBJ, or glTF 2.0 as `.glb` or `.gltf` with its buffers —
  * into one shape whatever the format:
  *
- *   { meshes: [{ name, node, skin, arrays, targets, color }], nodes, skins, clips }
+ *   { meshes: [{ name, node, skin, arrays, targets, color, bounds }], nodes, skins, clips }
  *
  * `arrays` is the arrays shape — position, indices, and normal, tangent,
  * texcoord, joints, weights when the file carries them — which twgl's
- * createBufferInfoFromArrays takes as it is. `targets` are a mesh's morph
+ * createBufferInfoFromArrays takes as it is. A mesh whose file carries no
+ * normals gets smooth ones (tree's meshNormals), and `bounds` is its extent in
+ * its own space, `{ min, max, center, diag }` (tree's meshBounds). `targets` are a mesh's morph
  * targets as delta arrays, `color` its base colour [r,g,b,a], `node` the node
  * it hangs from and `skin` its skin's index or −1. `nodes` is the hierarchy
  * `{ names, parents, rest }`, parents first, `rest` a pose of ten numbers per
@@ -54,9 +71,10 @@ export async function loadImage(url, opts) {
  * targets, skins or clips (host/obj); glTF is read by host/gltf.
  *
  * @param {string} url
- * @param {{ fetch?:object, format?:string }} [opts]  fetch: the fetch init
- *        (credentials, mode, …). format: 'obj' | 'glb' | 'gltf' when the URL's
- *        extension does not say.
+ * @param {{ fetch?:object, format?:string, normals?:boolean }} [opts]  fetch: the
+ *        fetch init (credentials, mode, …). format: 'obj' | 'glb' | 'gltf' when the
+ *        URL's extension does not say. normals (default true): compute the normals
+ *        a mesh lacks.
  * @returns {Promise<{ meshes:object[], nodes:{ names:string[], parents:Int32Array, rest:Float32Array },
  *                     skins:object[], clips:object[] }>}
  */
@@ -73,16 +91,16 @@ export async function loadModel(url, opts) {
   };
   const res = await get(url);
   if (format === 'obj') {
-    return {
+    return _finish({
       meshes: [{ name: '', node: 0, skin: -1, arrays: parseObj(await res.text()), targets: [], color: [1, 1, 1, 1] }],
       nodes: { names: [''], parents: Int32Array.of(-1), rest: Float32Array.of(0, 0, 0, 0, 0, 0, 1, 1, 1, 1) },
       skins: [],
       clips: [],
-    };
+    }, o);
   }
   if (format === 'glb') {
     const { json, bin } = parseGlb(await res.arrayBuffer());
-    return parseGltf(json, [bin]);
+    return _finish(parseGltf(json, [bin]), o);
   }
   const json = await res.json();
   const base = typeof location !== 'undefined' ? new URL(url, location.href) : url;
@@ -91,7 +109,7 @@ export async function loadModel(url, opts) {
     try { return String(new URL(uri, base)); } catch (e) { return url.replace(/[^/]*$/, '') + uri; }
   };
   const buffers = await Promise.all((json.buffers || []).map(async b => (await get(resolve(b.uri))).arrayBuffer()));
-  return parseGltf(json, buffers);
+  return _finish(parseGltf(json, buffers), o);
 }
 
 /**

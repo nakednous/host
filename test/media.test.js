@@ -22,7 +22,7 @@ test('loadImage: fetches the blob and decodes it into a bitmap; a bad status thr
   } finally { delete globalThis.fetch; delete globalThis.createImageBitmap; }
 });
 
-test('loadModel: an OBJ file is one white mesh under one identity node; normal and texcoord only when present; a bad status throws', async () => {
+test('loadModel: an OBJ file is one white mesh under one identity node, with bounds; missing normals computed unless declined; a bad status throws', async () => {
   const quad = 'v 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\nvt 0 0\nvt 1 0\nvt 1 1\nvt 0 1\nvn 0 0 1\nf 1/1/1 2/2/1 3/3/1 4/4/1\n';
   const bare = 'v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n';
   const calls = [];
@@ -32,8 +32,9 @@ test('loadModel: an OBJ file is one white mesh under one identity node; normal a
     assert.deepEqual(calls[0], ['quad.obj', { mode: 'cors' }]);
     assert.deepEqual(Object.keys(model), ['meshes', 'nodes', 'skins', 'clips']);
     assert.equal(model.meshes.length, 1);
-    const { arrays: m, ...rest } = model.meshes[0];
+    const { arrays: m, bounds, ...rest } = model.meshes[0];
     assert.deepEqual(rest, { name: '', node: 0, skin: -1, targets: [], color: [1, 1, 1, 1] });
+    assert.deepEqual(bounds, { min: [0, 0, 0], max: [1, 1, 0], center: [0.5, 0.5, 0], diag: Math.SQRT2 });
     assert.deepEqual(model.nodes, { names: [''], parents: Int32Array.of(-1), rest: Float32Array.of(0, 0, 0, 0, 0, 0, 1, 1, 1, 1) });
     assert.deepEqual(model.skins, []); assert.deepEqual(model.clips, []);
     assert.deepEqual(Object.keys(m).sort(), ['indices', 'normal', 'position', 'texcoord']);
@@ -45,7 +46,11 @@ test('loadModel: an OBJ file is one white mesh under one identity node; normal a
     assert.equal(m.texcoord.numComponents, 2);
     assert.deepEqual([...m.texcoord.data], [0, 0, 1, 0, 1, 1, 0, 1]);
     const b = (await loadModel('bare.obj?v=2')).meshes[0].arrays;
-    assert.deepEqual(Object.keys(b).sort(), ['indices', 'position']);
+    assert.deepEqual(Object.keys(b).sort(), ['indices', 'normal', 'position']);   // no normals in the file: computed
+    assert.deepEqual([...b.normal.data], [0, 0, 1, 0, 0, 1, 0, 0, 1]);
+    const raw = (await loadModel('bare.obj', { normals: false })).meshes[0];
+    assert.deepEqual(Object.keys(raw.arrays).sort(), ['indices', 'position']);
+    assert.equal(raw.bounds.diag, Math.SQRT2);
     assert.equal(b.position.data.length / 3, 3);
     await assert.rejects(loadModel('nope.obj'), /404/);
     await assert.rejects(loadModel('model.stl'), /unknown format/);
@@ -68,6 +73,8 @@ test('loadModel: a .glb and a .gltf with its buffer arrive in the same shape', a
     assert.deepEqual(a, b);
     assert.deepEqual(Object.keys(a), ['meshes', 'nodes', 'skins', 'clips']);
     assert.equal(a.meshes[0].skin, 0); assert.equal(a.clips[0].name, 'Slide');
+    assert.deepEqual([...a.meshes[0].arrays.normal.data], [0, 0, 1, 0, 0, 1, 0, 0, 1]);
+    assert.deepEqual(a.meshes[0].bounds.max, [1, 1, 0]);
   } finally { delete globalThis.fetch; }
 });
 
