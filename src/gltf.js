@@ -61,7 +61,7 @@ export function parseGlb(buffer) {
 /**
  * Read a glTF document over its buffers.
  *
- * A mesh entry is one triangle primitive under one node: `arrays` in the
+ * A part is one triangle primitive under one node: `mesh` in the
  * arrays shape (position, normal?, tangent?, texcoord?, joints?, weights?,
  * indices), `targets` its morph targets as delta arrays, `color` the
  * material's base colour factor, `node` the node it hangs from and `skin` its
@@ -70,7 +70,7 @@ export function parseGlb(buffer) {
  *
  * @param {object} json  The glTF document.
  * @param {ArrayBuffer[]} buffers  One per `json.buffers` entry.
- * @returns {{ meshes:{ name:string, node:number, skin:number, arrays:object,
+ * @returns {{ parts:{ name:string, node:number, skin:number, mesh:object,
  *                      targets:{ name:string, position?:object, normal?:object }[], color:number[] }[],
  *             nodes:{ names:string[], parents:Int32Array, rest:Float32Array },
  *             skins:{ name:string, joints:Uint16Array, inverseBind:Float32Array }[],
@@ -128,7 +128,7 @@ export function parseGltf(json, buffers) {
     rest.set(t, i * 10); rest.set(r, i * 10 + 3); rest.set(s, i * 10 + 7);
   });
 
-  // meshes: one entry per triangle primitive per node
+  // parts: one per triangle primitive per node
   const primitives = (json.meshes || []).map((mesh) => {
     const out = [];
     for (const prim of mesh.primitives) {
@@ -156,13 +156,13 @@ export function parseGltf(json, buffers) {
     return { name: mesh.name || '', primitives: out };
   });
 
-  const meshes = [];
+  const parts = [];
   order.forEach((old, i) => {
     const node = src[old];
     if (node.mesh === undefined) return;
     const mesh = primitives[node.mesh];
     for (const p of mesh.primitives) {
-      meshes.push({ name: mesh.name || names[i], node: i, skin: node.skin ?? -1, arrays: p.arrays, targets: p.targets, color: p.color });
+      parts.push({ name: mesh.name || names[i], node: i, skin: node.skin ?? -1, mesh: p.arrays, targets: p.targets, color: p.color });
     }
   });
 
@@ -187,5 +187,5 @@ export function parseGltf(json, buffers) {
     return { name: anim.name || '', duration, channels };
   });
 
-  return { meshes, nodes: { names, parents, rest }, skins, clips };
+  return { parts, nodes: { names, parents, rest }, skins, clips };
 }

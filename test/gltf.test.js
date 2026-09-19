@@ -21,17 +21,17 @@ test('parseGltf: nodes re-indexed parents first; TRS from a matrix; the rest pos
 test('parseGltf: a triangle primitive in the arrays shape, its target, colour, node and skin; other modes skipped', () => {
   const { json, bin } = document();
   const m = parseGltf(json, [bin]);
-  assert.equal(m.meshes.length, 1);
-  const mesh = m.meshes[0];
+  assert.equal(m.parts.length, 1);
+  const mesh = m.parts[0];
   assert.equal(mesh.name, 'tri'); assert.equal(mesh.node, 0); assert.equal(mesh.skin, 0);
   assert.deepEqual(mesh.color, [1, 0.5, 0, 1]);
-  assert.deepEqual(Object.keys(mesh.arrays).sort(), ['indices', 'joints', 'position', 'weights']);
-  assert.ok(mesh.arrays.indices.data instanceof Uint32Array);
-  assert.deepEqual([...mesh.arrays.indices.data], [0, 1, 2]);
-  assert.ok(mesh.arrays.joints.data instanceof Uint8Array);
-  assert.equal(mesh.arrays.joints.numComponents, 4);
-  assert.ok(mesh.arrays.weights.data instanceof Float32Array);
-  assert.ok(Math.abs(mesh.arrays.weights.data[4] - 0.2) < 1e-6 && Math.abs(mesh.arrays.weights.data[5] - 0.8) < 1e-6);
+  assert.deepEqual(Object.keys(mesh.mesh).sort(), ['indices', 'joints', 'position', 'weights']);
+  assert.ok(mesh.mesh.indices.data instanceof Uint32Array);
+  assert.deepEqual([...mesh.mesh.indices.data], [0, 1, 2]);
+  assert.ok(mesh.mesh.joints.data instanceof Uint8Array);
+  assert.equal(mesh.mesh.joints.numComponents, 4);
+  assert.ok(mesh.mesh.weights.data instanceof Float32Array);
+  assert.ok(Math.abs(mesh.mesh.weights.data[4] - 0.2) < 1e-6 && Math.abs(mesh.mesh.weights.data[5] - 0.8) < 1e-6);
   assert.equal(mesh.targets.length, 1);
   assert.equal(mesh.targets[0].name, 'Puff');
   assert.deepEqual([...mesh.targets[0].position.data], [0, 0, 1, 0, 0, 1, 0, 0, 1]);
@@ -60,10 +60,10 @@ test('parseGltf: an absent inverse bind accessor is identities; no indices count
   delete json.meshes[0].primitives[0].material;
   const m = parseGltf(json, [bin]);
   assert.deepEqual([...m.skins[0].inverseBind.slice(16)], [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
-  assert.deepEqual([...m.meshes[0].arrays.indices.data], [0, 1, 2]);
-  assert.deepEqual(m.meshes[0].color, [1, 1, 1, 1]);
+  assert.deepEqual([...m.parts[0].mesh.indices.data], [0, 1, 2]);
+  assert.deepEqual(m.parts[0].color, [1, 1, 1, 1]);
   const bare = parseGltf({ asset: { version: '2.0' } }, []);
-  assert.deepEqual(bare, { meshes: [], nodes: { names: [], parents: new Int32Array(0), rest: new Float32Array(0) }, skins: [], clips: [] });
+  assert.deepEqual(bare, { parts: [], nodes: { names: [], parents: new Int32Array(0), rest: new Float32Array(0) }, skins: [], clips: [] });
 });
 
 test('parseGltf: an interleaved view is unpacked by its stride', () => {
@@ -74,8 +74,8 @@ test('parseGltf: an interleaved view is unpacked by its stride', () => {
     accessors: [{ bufferView: 0, componentType: 5126, count: 3, type: 'VEC3' }],
   };
   const m = parseGltf(json, [data.buffer]);
-  assert.deepEqual([...m.meshes[0].arrays.position.data], [0, 0, 0, 1, 0, 0, 0, 1, 0]);
-  assert.equal(m.meshes[0].skin, -1);
+  assert.deepEqual([...m.parts[0].mesh.position.data], [0, 0, 0, 1, 0, 0, 0, 1, 0]);
+  assert.equal(m.parts[0].skin, -1);
 });
 
 test('parseGltf: sparse accessors and compressed geometry throw', () => {
@@ -89,7 +89,7 @@ test('parseGlb: splits the container; a bad magic or version throws', () => {
   const { json, bin } = document();
   const out = parseGlb(glb(json, bin));
   assert.deepEqual(out.json.nodes, json.nodes);
-  assert.equal(parseGltf(out.json, [out.bin]).meshes[0].name, 'tri');
+  assert.equal(parseGltf(out.json, [out.bin]).parts[0].name, 'tri');
   assert.throws(() => parseGlb(new ArrayBuffer(12)), /not a GLB/);
   const v1 = glb(json, bin); new DataView(v1).setUint32(4, 1, true);
   assert.throws(() => parseGlb(v1), /version 1/);

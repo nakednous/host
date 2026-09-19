@@ -3,9 +3,10 @@
  * @module host/media
  * @license AGPL-3.0-only
  *
- * A model arrives as arrays for a bridge's buffer upload, with its hierarchy,
- * skins and clips beside them: loadModel fetches an OBJ file (host/obj) or a
- * glTF 2.0 one (host/gltf) into one shape.
+ * A mesh arrives as arrays for a bridge's buffer upload, its bounds beside
+ * them: loadMesh. A model keeps a file's structure — parts, hierarchy, skins,
+ * clips: loadModel. Both read OBJ (host/obj) and glTF 2.0 (host/gltf), or
+ * another format through a parser the caller passes.
  *
  * What a texture upload reads from: an ImageBitmap fetched from a URL, a
  * hidden <video> element from a file or the user's camera, a bitmap drawn
@@ -19,7 +20,7 @@
 
 import { parseObj } from './obj.js';
 import { parseGlb, parseGltf } from './gltf.js';
-import { meshNormals, meshBounds } from '@nakednous/tree';
+import { meshNormals, meshBounds, meshGroups, meshFlatten } from '@nakednous/tree';
 
 /**
  * Fetch an image into an ImageBitmap.
@@ -37,70 +38,73 @@ export async function loadImage(url, opts) {
   return o.bitmap ? createImageBitmap(blob, o.bitmap) : createImageBitmap(blob);
 }
 
-// Normals where a mesh lacks them, and every mesh's bounds; meshes sharing arrays share both.
+const _ONE_NODE = () => ({ names: [''], parents: Int32Array.of(-1), rest: Float32Array.of(0, 0, 0, 0, 0, 0, 1, 1, 1, 1) });
+const _part = (mesh) => ({ name: '', node: 0, skin: -1, mesh, targets: [], color: [1, 1, 1, 1] });
+
+// A morph target's deltas expanded through its mesh's indices; a target carries no indices of its own.
+function _flatTarget(target, indices) {
+  const flat = meshFlatten(target, indices);
+  delete flat.indices;
+  return flat;
+}
+
+// The normals option applied to every part, then each mesh's bounds; parts sharing a mesh share the result.
+//   undefined / true  the file's normals; smooth ones where a mesh has none
+//   'smooth'          always recomputed, summed per position (tree's meshGroups), so a faceted file smooths
+//   'flat'            always recomputed on the flattened mesh (tree's meshFlatten), morph targets flattened with it
+//   false             nothing computed
 function _finish(model, o) {
-  const bounds = new Map();
-  for (const mesh of model.meshes) {
-    const a = mesh.arrays, p = a.position.data;
-    if (o.normals !== false && !a.normal) {
-      a.normal = { numComponents: 3, data: meshNormals(new Float32Array(p.length), p, a.indices.data) };
+  const mode = o.normals === undefined || o.normals === true ? 'fill' : o.normals;
+  if (mode !== 'fill' && mode !== 'smooth' && mode !== 'flat' && mode !== false) {
+    throw new Error("[host] model: normals is one of 'smooth', 'flat', false, or left out.");
+  }
+  const done = new Map();
+  for (const part of model.parts) {
+    const source = part.mesh;
+    if (done.has(source)) {
+      part.mesh = done.get(source);
+      if (mode === 'flat') part.targets = part.targets.map(t => _flatTarget(t, source.indices.data));
+      continue;
     }
-    if (!bounds.has(a)) bounds.set(a, meshBounds({ min: [0, 0, 0], max: [0, 0, 0], center: [0, 0, 0], diag: 0 }, p));
-    mesh.bounds = bounds.get(a);
+    let mesh = source;
+    const bounds = meshBounds({ min: [0, 0, 0], max: [0, 0, 0], center: [0, 0, 0], diag: 0 }, mesh.position.data);
+    if (mode === 'flat') {
+      mesh = meshFlatten(source);
+      const p = mesh.position.data;
+      mesh.normal = { numComponents: 3, data: meshNormals(new Float32Array(p.length), p, mesh.indices.data) };
+      part.targets = part.targets.map(t => _flatTarget(t, source.indices.data));
+    } else if (mode === 'smooth' || (mode === 'fill' && !mesh.normal)) {
+      const p = mesh.position.data;
+      const groups = meshGroups(new Int32Array(p.length / 3), p, 1e-6 * bounds.diag);
+      mesh.normal = { numComponents: 3, data: meshNormals(new Float32Array(p.length), p, mesh.indices.data, { groups }) };
+    }
+    mesh.bounds = bounds;
+    done.set(source, mesh);
+    part.mesh = mesh;
   }
   return model;
 }
 
-/**
- * Fetch a model — OBJ, or glTF 2.0 as `.glb` or `.gltf` with its buffers —
- * into one shape whatever the format:
- *
- *   { meshes: [{ name, node, skin, arrays, targets, color, bounds }], nodes, skins, clips }
- *
- * `arrays` is the arrays shape — position, indices, and normal, tangent,
- * texcoord, joints, weights when the file carries them — which twgl's
- * createBufferInfoFromArrays takes as it is. A mesh whose file carries no
- * normals gets smooth ones (tree's meshNormals), and `bounds` is its extent in
- * its own space, `{ min, max, center, diag }` (tree's meshBounds). `targets` are a mesh's morph
- * targets as delta arrays, `color` its base colour [r,g,b,a], `node` the node
- * it hangs from and `skin` its skin's index or −1. `nodes` is the hierarchy
- * `{ names, parents, rest }`, parents first, `rest` a pose of ten numbers per
- * node; `skins` are `{ name, joints, inverseBind }` and `clips` are `{ name,
- * duration, channels }` — what tree's clipSample, poseWorld and jointPalette
- * take. An OBJ file is one white mesh under one identity node, with no
- * targets, skins or clips (host/obj); glTF is read by host/gltf.
- *
- * @param {string} url
- * @param {{ fetch?:object, format?:string, normals?:boolean }} [opts]  fetch: the
- *        fetch init (credentials, mode, …). format: 'obj' | 'glb' | 'gltf' when the
- *        URL's extension does not say. normals (default true): compute the normals
- *        a mesh lacks.
- * @returns {Promise<{ meshes:object[], nodes:{ names:string[], parents:Int32Array, rest:Float32Array },
- *                     skins:object[], clips:object[] }>}
- */
-export async function loadModel(url, opts) {
-  const o = opts || {};
-  const format = (o.format || (/\.(\w+)(?:[?#].*)?$/.exec(url) || [])[1] || '').toLowerCase();
-  if (format !== 'obj' && format !== 'glb' && format !== 'gltf') {
-    throw new Error('[host] model: ' + url + ' → unknown format; opts.format is one of obj, glb, gltf.');
-  }
-  const get = async (at) => {
-    const res = await fetch(at, o.fetch);
-    if (!res.ok) throw new Error('[host] model: ' + at + ' → ' + res.status);
+// Fetch and parse into the model shape, before the normals and bounds.
+async function _load(url, o, what) {
+  const get = async (at, init) => {
+    const res = await fetch(at, init);
+    if (!res.ok) throw new Error('[host] ' + what + ': ' + at + ' → ' + res.status);
     return res;
   };
-  const res = await get(url);
-  if (format === 'obj') {
-    return _finish({
-      meshes: [{ name: '', node: 0, skin: -1, arrays: parseObj(await res.text()), targets: [], color: [1, 1, 1, 1] }],
-      nodes: { names: [''], parents: Int32Array.of(-1), rest: Float32Array.of(0, 0, 0, 0, 0, 0, 1, 1, 1, 1) },
-      skins: [],
-      clips: [],
-    }, o);
+  if (typeof o.parse === 'function') {
+    const mesh = await o.parse(await (await get(url, o.fetch)).arrayBuffer());
+    return { parts: [_part(mesh)], nodes: _ONE_NODE(), skins: [], clips: [] };
   }
+  const format = (o.format || (/\.(\w+)(?:[?#].*)?$/.exec(url) || [])[1] || '').toLowerCase();
+  if (format !== 'obj' && format !== 'glb' && format !== 'gltf') {
+    throw new Error('[host] ' + what + ': ' + url + ' → unknown format; opts.format is one of obj, glb, gltf, or pass opts.parse.');
+  }
+  const res = await get(url, o.fetch);
+  if (format === 'obj') return { parts: [_part(parseObj(await res.text()))], nodes: _ONE_NODE(), skins: [], clips: [] };
   if (format === 'glb') {
     const { json, bin } = parseGlb(await res.arrayBuffer());
-    return _finish(parseGltf(json, [bin]), o);
+    return parseGltf(json, [bin]);
   }
   const json = await res.json();
   const base = typeof location !== 'undefined' ? new URL(url, location.href) : url;
@@ -108,8 +112,77 @@ export async function loadModel(url, opts) {
     if (/^data:/.test(uri)) return uri;
     try { return String(new URL(uri, base)); } catch (e) { return url.replace(/[^/]*$/, '') + uri; }
   };
-  const buffers = await Promise.all((json.buffers || []).map(async b => (await get(resolve(b.uri))).arrayBuffer()));
-  return _finish(parseGltf(json, buffers), o);
+  const buffers = await Promise.all((json.buffers || []).map(async b => (await get(resolve(b.uri), o.fetch)).arrayBuffer()));
+  return parseGltf(json, buffers);
+}
+
+/**
+ * Fetch a mesh: one object in the arrays shape — position, indices, and
+ * normal, tangent, texcoord, color, joints, weights when the file carries them
+ * — with `bounds`, its extent `{ min, max, center, diag }`, beside them. A
+ * bridge's buffer upload takes it as it is; `size / mesh.bounds.diag` is the
+ * scale that fits any file to `size`.
+ *
+ * Formats: OBJ (host/obj), and glTF 2.0 as `.glb` or `.gltf` (host/gltf) when
+ * the file holds one part. A file of several parts rejects, naming loadModel:
+ * a mesh is never silently the first of many. `opts.parse` reads any other
+ * format: it receives the fetched ArrayBuffer and returns the arrays shape.
+ *
+ * Normals. Left out, the option keeps the file's normals and gives smooth
+ * ones to a mesh that has none. 'smooth' always recomputes them, summed per
+ * position, so a file that arrives faceted or cut along a texture seam
+ * smooths too. 'flat' always recomputes them on the flattened mesh — every
+ * triangle owning its vertices, so the vertex count grows and the indices
+ * count up. false computes nothing. The procedure, its limits (no crease
+ * angle; grouping by grid cell, at 1e-6 of the bounds' diagonal) and its
+ * sources are tree/mesh's. glTF viewers compute flat normals for a file
+ * without any; here that is `normals: 'flat'`.
+ *
+ * @param {string} url
+ * @param {{ fetch?:object, format?:string, parse?:function(ArrayBuffer):object,
+ *           normals?:'smooth'|'flat'|false }} [opts]  fetch: the fetch init. format: 'obj' |
+ *        'glb' | 'gltf' when the URL's extension does not say. parse: a parser for another
+ *        format. normals: as above.
+ * @returns {Promise<object>} The mesh.
+ */
+export async function loadMesh(url, opts) {
+  const o = opts || {};
+  const model = await _load(url, o, 'mesh');
+  if (model.parts.length !== 1) {
+    throw new Error('[host] mesh: ' + url + ' → ' + model.parts.length + ' parts; loadModel keeps them apart.');
+  }
+  return _finish(model, o).parts[0].mesh;
+}
+
+/**
+ * Fetch a model with its structure — what a rig, morph targets or animation
+ * need; a single mesh is loadMesh's:
+ *
+ *   { parts: [{ name, node, skin, mesh, targets, color }], nodes, skins, clips }
+ *
+ * A part is one triangle primitive under one node: `mesh` as loadMesh returns
+ * it (the arrays shape with `bounds`, in the part's own space), `targets` its
+ * morph targets as delta arrays, `color` its base colour [r, g, b, a], `node`
+ * the node it hangs from and `skin` its skin's index or −1. `nodes` is the
+ * hierarchy `{ names, parents, rest }`, parents first, `rest` a pose of ten
+ * numbers per node; `skins` are `{ name, joints, inverseBind }` and `clips`
+ * `{ name, duration, channels }` — what tree's clipSample, poseWorld and
+ * jointPalette take. A rigid part draws under its node's world matrix, a
+ * skinned one under its skin's joint palette. An OBJ file is one white part
+ * under one identity node.
+ *
+ * The options are loadMesh's; `normals` applies to every part, 'flat'
+ * flattening each part's morph targets with its mesh.
+ *
+ * @param {string} url
+ * @param {{ fetch?:object, format?:string, parse?:function(ArrayBuffer):object,
+ *           normals?:'smooth'|'flat'|false }} [opts]
+ * @returns {Promise<{ parts:object[], nodes:{ names:string[], parents:Int32Array, rest:Float32Array },
+ *                     skins:object[], clips:object[] }>}
+ */
+export async function loadModel(url, opts) {
+  const o = opts || {};
+  return _finish(await _load(url, o, 'model'), o);
 }
 
 /**
