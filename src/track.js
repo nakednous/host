@@ -17,9 +17,11 @@
  * (ui's contract) — authors a keyframe where the camera is looking: on a pose
  * track the pose lands at the centre of the installed camera's frustum at
  * that depth, aimed along the camera's own eye frame; on a camera track the
- * camera state is captured, the depth having nothing to place. The frame is
- * the host's view bag — the matrices the last setCamera installed — so the
- * placement is the same on every bridge and needs no renderer here.
+ * camera state is captured, the depth having nothing to place. A panel whose
+ * depth row is hidden passes no depth, which reads the panel's default, 0.5.
+ * The frame is the host's view bag — the matrices the last setCamera
+ * installed — so the placement is the same on every bridge and needs no
+ * renderer here.
  */
 
 'use strict';
@@ -46,7 +48,8 @@ const _up  = [0, 0, 0];   // the camera's up
  *
  * @param {object} host
  * @param {function} add    The track's core add, already bound.
- * @param {number} depth    NDC-linear depth in [0, 1]; clamped, NaN reads 0.5.
+ * @param {number} [depth]  NDC-linear depth in [0, 1]; clamped, absent or NaN
+ *                          reads the panel's own default, 0.5.
  * @returns {boolean} false when no camera is installed (a stale view bag).
  */
 function _addInFront(host, add, depth) {
@@ -84,12 +87,13 @@ export function poseTrack(host, opts) {
   const track = new PoseTrack();
   _wirePoseTrack(host, track);
 
-  // add(depth): the transport's + (see the module header). Anything else —
-  // a spec, an array of specs, no argument — is the core track's own.
+  // add(depth): the transport's + (see the module header). A spec, or an array
+  // of specs, is the core track's own; no argument — the panel with its depth
+  // row hidden — places at the panel's default depth, 0.5.
   const coreAdd = track.add.bind(track);
   let warned = false;
   track.add = function (spec, addOpts) {
-    if (typeof spec !== 'number') return coreAdd(spec, addOpts);
+    if (spec != null && typeof spec !== 'number') return coreAdd(spec, addOpts);
     if (!_addInFront(host, coreAdd, spec) && !warned) {
       warned = true;
       console.warn('[host] poseTrack: add(depth) places a pose against the installed camera, and the view bag is stale — no keyframe added. Call the bridge\'s setCamera first.');

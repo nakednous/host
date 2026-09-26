@@ -122,6 +122,16 @@ test('poseTrack: add(depth) is NDC-linear, clamped, never deduplicated, and no-o
   assert.equal(t2.keyframes.length, 1);
 });
 
+test('poseTrack: add() with no depth — the panel with its depth row hidden — places at the default 0.5', () => {
+  const { host } = setup();
+  const track = host.poseTrack();
+  track.add();
+  assert.equal(track.keyframes.length, 1);
+  const kf  = track.keyframes[0];
+  const ndc = mapLocation([0, 0, 0], kf.pos[0], kf.pos[1], kf.pos[2], WORLD, NDC, host.view, host.view.vp, host.view.ndcZMin);
+  near(ndc[2], 0, 1e-3);                                   // the frustum's centre, as depth 0.5 reads
+});
+
 test('TrackHandles: a drag on a keyframe dot moves the keyframe; hooks carry the index and field', () => {
   const { canvas, host } = setup();
   const track = host.poseTrack({ handles: true });
