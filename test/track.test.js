@@ -6,7 +6,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createCamera, mapLocation, SCREEN, WORLD } from '@nakednous/tree';
+import { createCamera, mapLocation, qFromLookDir, NDC, SCREEN, WORLD } from '@nakednous/tree';
 import { createHost, TrackHandles } from '../src/index.js';
 import { createCanvas, installWindow } from './dom.js';
 
@@ -72,6 +72,54 @@ test('cameraTrack: add() captures the camera state, add({ camera }) any camera s
   assert.equal(track.keyframes.length, 4);
   assert.deepEqual(track.keyframes[3].eye, [6, 6, 6]);
   assert.equal(host.cameraTrack(null).add(), undefined);
+});
+
+test('cameraTrack: the panel\'s + passes a depth no camera keyframe can use — the camera is captured instead', () => {
+  const { host } = setup();
+  const cam = createCamera({ eye: [4, 5, 6] });
+  const track = host.cameraTrack(cam);
+  track.add(0.5);
+  assert.equal(track.keyframes.length, 1);
+  assert.deepEqual(track.keyframes[0].eye, [4, 5, 6]);
+});
+
+test('poseTrack: add(depth) authors the pose at the frustum centre, aimed along the camera\'s eye frame', () => {
+  const { host } = setup();
+  const tilted = createCamera({ eye: [300, 200, 400], center: [0, 0, 0], fov: Math.PI / 3, near: 1, far: 2000 });
+  host.view.setCamera(tilted);
+  const track = host.poseTrack();
+  track.add(0.5);
+  assert.equal(track.keyframes.length, 1);
+  const kf  = track.keyframes[0];
+  const ndc = mapLocation([0, 0, 0], kf.pos[0], kf.pos[1], kf.pos[2], WORLD, NDC, host.view, host.view.vp, host.view.ndcZMin);
+  near(ndc[0], 0, 1e-3); near(ndc[1], 0, 1e-3); near(ndc[2], 0, 1e-3);
+  const e = tilted.eye, c = tilted.center;
+  const q = qFromLookDir([0, 0, 0, 1], [c[0] - e[0], c[1] - e[1], c[2] - e[2]], tilted.up);
+  for (let i = 0; i < 4; i++) near(kf.rot[i], q[i], 1e-5);
+  assert.deepEqual(kf.scl, [1, 1, 1]);
+});
+
+test('poseTrack: add(depth) is NDC-linear, clamped, never deduplicated, and no-ops on a stale bag', () => {
+  const { host } = setup();
+  const track = host.poseTrack();
+  const ndcZOf = (kf) => mapLocation([0, 0, 0], kf.pos[0], kf.pos[1], kf.pos[2], WORLD, NDC, host.view, host.view.vp, host.view.ndcZMin)[2];
+  track.add(0); track.add(1); track.add(0.25); track.add(-3); track.add(9); track.add(0.5); track.add(0.5);
+  assert.equal(track.keyframes.length, 7);                 // the + adds even onto an identical pose
+  near(ndcZOf(track.keyframes[0]), -1,   1e-3);            // 0 → the near plane's centre
+  near(ndcZOf(track.keyframes[1]),  1,   1e-3);            // 1 → the far plane's
+  near(ndcZOf(track.keyframes[2]), -0.5, 1e-3);
+  near(ndcZOf(track.keyframes[3]), -1,   1e-3);            // below 0 clamps
+  near(ndcZOf(track.keyframes[4]),  1,   1e-3);            // above 1 clamps
+  near(ndcZOf(track.keyframes[5]),  0,   1e-3);
+
+  const bare = createHost(createCanvas({ rect: { left: 0, top: 0, width: 400, height: 300 } }));
+  const t2   = bare.poseTrack();
+  const warn = console.warn;
+  console.warn = () => {};
+  try { t2.add(0.5); } finally { console.warn = warn; }
+  assert.equal(t2.keyframes.length, 0);                    // no camera installed: nothing to place against
+  t2.add({ pos: [1, 2, 3] });                              // a spec is the core track's, camera or not
+  assert.equal(t2.keyframes.length, 1);
 });
 
 test('TrackHandles: a drag on a keyframe dot moves the keyframe; hooks carry the index and field', () => {

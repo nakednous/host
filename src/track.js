@@ -12,12 +12,55 @@
  * either decorates the track with TrackHandles: one VIEW handle per
  * draggable keyframe field (pos / eye / center), an optional rot DIAL per
  * keyframe about a declared axis, all on one router.
+ *
+ * add(depth) — the transport panel's + button, which passes its depth slider
+ * (ui's contract) — authors a keyframe where the camera is looking: on a pose
+ * track the pose lands at the centre of the installed camera's frustum at
+ * that depth, aimed along the camera's own eye frame; on a camera track the
+ * camera state is captured, the depth having nothing to place. The frame is
+ * the host's view bag — the matrices the last setCamera installed — so the
+ * placement is the same on every bridge and needs no renderer here.
  */
 
 'use strict';
 
-import { PoseTrack, CameraTrack, qFromAxisAngle, DIAL } from '@nakednous/tree';
+import { PoseTrack, CameraTrack, qFromAxisAngle, DIAL, mapLocation, NDC, WORLD } from '@nakednous/tree';
 import { VIEW } from './handle.js';
+
+// ── Placement — the + button's depth ───────────────────────────────────────
+//
+// The transport panel hands add() a depth in [0, 1] and expects a keyframe in
+// front of the camera. Writer-free placement: unproject the frustum's centre
+// through the view bag's P · V inverse and aim the pose along the bag's eye
+// frame (E = V⁻¹, its columns right / up / back). The depth is NDC-linear, as
+// the p5 transport's was — 0 the near plane's centre, 1 the far plane's — so
+// every bridge's own ndcZMin maps it without the caller knowing the API.
+
+const _at  = [0, 0, 0];   // the unprojected frustum centre
+const _dir = [0, 0, 0];   // the camera's forward
+const _up  = [0, 0, 0];   // the camera's up
+
+/**
+ * Append a pose at the centre of the installed camera's frustum, `depth` of
+ * the way from the near plane to the far one.
+ *
+ * @param {object} host
+ * @param {function} add    The track's core add, already bound.
+ * @param {number} depth    NDC-linear depth in [0, 1]; clamped, NaN reads 0.5.
+ * @returns {boolean} false when no camera is installed (a stale view bag).
+ */
+function _addInFront(host, add, depth) {
+  const view = host.view;
+  if (!view || view.stale) return false;
+  const d    = Number.isFinite(depth) ? (depth < 0 ? 0 : depth > 1 ? 1 : depth) : 0.5;
+  const ndcZ = view.ndcZMin + d * (1 - view.ndcZMin);
+  mapLocation(_at, 0, 0, ndcZ, NDC, WORLD, view, view.vp, view.ndcZMin);
+  const e = view.mat4Eye;                        // columns: right · up · back · eye
+  _dir[0] = -e[8];  _dir[1] = -e[9];  _dir[2] = -e[10];
+  _up[0]  =  e[4];  _up[1]  =  e[5];  _up[2]  =  e[6];
+  add({ pos: [_at[0], _at[1], _at[2]], rot: { dir: _dir, up: _up } }, { deduplicate: false });
+  return true;
+}
 
 // ── Players ────────────────────────────────────────────────────────────────
 
@@ -40,6 +83,19 @@ export function poseTrack(host, opts) {
   const o = opts || {};
   const track = new PoseTrack();
   _wirePoseTrack(host, track);
+
+  // add(depth): the transport's + (see the module header). Anything else —
+  // a spec, an array of specs, no argument — is the core track's own.
+  const coreAdd = track.add.bind(track);
+  let warned = false;
+  track.add = function (spec, addOpts) {
+    if (typeof spec !== 'number') return coreAdd(spec, addOpts);
+    if (!_addInFront(host, coreAdd, spec) && !warned) {
+      warned = true;
+      console.warn('[host] poseTrack: add(depth) places a pose against the installed camera, and the view bag is stale — no keyframe added. Call the bridge\'s setCamera first.');
+    }
+  };
+
   if (o.handles) track.handles = new TrackHandles(host, track, o.handles, false);
   return track;
 }
@@ -60,7 +116,9 @@ export function cameraTrack(host, cam, opts) {
 
   const coreAdd = track.add.bind(track);
   track.add = function (spec, addOpts) {
-    if (spec == null) {
+    // No spec, or the transport panel's depth: a camera keyframe *is* the
+    // camera, so there is nothing a placement depth could move — capture.
+    if (spec == null || typeof spec === 'number') {
       if (!state) return;
       spec = state;
     } else if (Array.isArray(spec)) {
