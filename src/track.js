@@ -21,7 +21,8 @@
  * depth row is hidden passes no depth, which reads the panel's default, 0.5.
  * The frame is the host's view bag — the matrices the last setCamera
  * installed — so the placement is the same on every bridge and needs no
- * renderer here.
+ * renderer here. remove() is the panel's −: no argument retracts the last
+ * keyframe, one per call, an index staying the core track's own remove.
  */
 
 'use strict';
@@ -67,6 +68,17 @@ function _addInFront(host, add, depth) {
 
 // ── Players ────────────────────────────────────────────────────────────────
 
+// remove(): the panel's −, retracting the last authored keyframe — one per
+// click, either kind of track. An index stays the core track's own remove, so
+// a caller editing by index is unaffected; an empty track removes nothing.
+function _wireRemove(track) {
+  const coreRemove = track.remove.bind(track);
+  track.remove = function (index) {
+    return coreRemove(index == null ? track.keyframes.length - 1 : index);
+  };
+  return track;
+}
+
 function _wirePoseTrack(host, track) {
   let player = null;
   track._onActivate = () => {
@@ -101,7 +113,7 @@ export function poseTrack(host, opts) {
   };
 
   if (o.handles) track.handles = new TrackHandles(host, track, o.handles, false);
-  return track;
+  return _wireRemove(track);
 }
 
 /**
@@ -151,7 +163,7 @@ export function cameraTrack(host, cam, opts) {
   track._onDeactivate = () => { host.players.remove(player); apply(); };
 
   if (o.handles) track.handles = new TrackHandles(host, track, o.handles, true);
-  return track;
+  return _wireRemove(track);
 }
 
 // ── TrackHandles ───────────────────────────────────────────────────────────

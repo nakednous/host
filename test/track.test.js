@@ -132,6 +132,37 @@ test('poseTrack: add() with no depth — the panel with its depth row hidden —
   near(ndc[2], 0, 1e-3);                                   // the frustum's centre, as depth 0.5 reads
 });
 
+test('remove(): no argument retracts the last keyframe, one per call; an index stays the core\'s', () => {
+  const { host } = setup();
+  const track = host.poseTrack();
+  track.add([{ pos: [0, 0, 0] }, { pos: [10, 0, 0] }, { pos: [20, 0, 0] }]);
+  assert.equal(track.remove(), true);                      // the − button's call
+  assert.equal(track.keyframes.length, 2);
+  assert.deepEqual([...track.keyframes[1].pos], [10, 0, 0]);
+  track.add({ pos: [30, 0, 0] });
+  assert.equal(track.remove(0), true);                     // an index is the core track's own
+  assert.deepEqual([...track.keyframes[0].pos], [10, 0, 0]);
+  assert.equal(track.remove(), true);
+  assert.equal(track.remove(), true);
+  assert.equal(track.keyframes.length, 0);
+  assert.equal(track.remove(), false);                     // nothing left: a no-op, never a throw
+  assert.equal(host.cameraTrack(createCamera()).remove(), false);
+});
+
+test('remove(): the cursor stays on the path when the keyframe it sat in goes', () => {
+  const { host } = setup();
+  const track = host.poseTrack();
+  track.add([{ pos: [0, 0, 0] }, { pos: [100, 0, 0] }, { pos: [200, 0, 0] }]);
+  track.seek(1);                                           // the far end: the last segment
+  assert.equal(track.info().seg, 1);
+  track.remove();                                          // that segment is gone with the keyframe
+  const i = track.info();
+  assert.equal(i.segments, 1);
+  assert.ok(i.seg >= 0 && i.seg < i.segments);
+  const out = { pos: [0, 0, 0], rot: [0, 0, 0, 1], scl: [1, 1, 1] };
+  assert.ok(Number.isFinite(track.eval(out).pos[0]));
+});
+
 test('TrackHandles: a drag on a keyframe dot moves the keyframe; hooks carry the index and field', () => {
   const { canvas, host } = setup();
   const track = host.poseTrack({ handles: true });
