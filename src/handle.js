@@ -345,7 +345,7 @@ export class Handle {
   }
 
   // The proxy's world position and its grab radius in world units — a
-  // constant grabPx screen size at the proxy's depth.
+  // constant grabPx canvas size at the proxy's depth.
   _proxyPrep() {
     const c = this._constraint, v = this._view, p = this._proxyPos;
     if (this._from && !this._grabbed) this._resolveFrame();

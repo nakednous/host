@@ -1,5 +1,5 @@
 /**
- * @file The label layer — DOM text over the canvas, anchored in world or screen space.
+ * @file The label layer — DOM text over the canvas, anchored in world or canvas space.
  * @module host/labels
  * @license AGPL-3.0-only
  *
@@ -18,7 +18,7 @@
  * class — a CSS class beside the layer's own 'host-label', frame — a
  * transient label that lives for the frame it was set in: a gizmo re-sets
  * it every draw and tick() removes it once a frame passes without. A label
- * whose screen depth leaves [0, 1] or whose anchor leaves the canvas is
+ * whose window depth leaves [0, 1] or whose anchor leaves the canvas is
  * hidden, not clamped. Elements are reused by id; tick() writes transforms
  * only, text when the string changed.
  */

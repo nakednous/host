@@ -8,10 +8,11 @@
  *
  * - pointerdown · pointermove · pointerup · pointercancel on the canvas,
  *   keydown (Esc) on the window.
- * - Coordinates in logical canvas px through the element's bounding
- *   rectangle — (clientX − rect.left) · (width / rect.width), the logical
- *   size read off the view bag's vp — the numbers mapLocation(SCREEN) and vp
- *   expect, so a CSS-scaled canvas maps correctly.
+ * - Coordinates in canvas space — the canvas's logical pixels, top-left, y
+ *   down — through the element's bounding rectangle: (clientX − rect.left) ·
+ *   (width / rect.width), the logical size read off the view bag's vp. These
+ *   are the numbers mapLocation(SCREEN) and vp expect (a viewport of negative
+ *   height), so a CSS-scaled canvas maps correctly.
  * - Per pointer: an entry { id, x, y, seq, down, up, cancel, owner }, kept
  *   from its press until the frame after its release; `seq` counts moves,
  *   so a consumer remembers the last seq it consumed and reads only new

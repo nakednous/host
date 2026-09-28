@@ -65,7 +65,7 @@ export function cameraHelm(host, cam, opts) {
   const helm = new PoseHelm();
   _applyOpts(helm, opts);
   if (opts && opts.from != null) {
-    console.error('[host] cameraHelm: a camera helm is always body-fly and has no `from`. Ignoring it; bind the camera to a poseHelm for screen- or world-relative motion.');
+    console.error('[host] cameraHelm: a camera helm is always body-fly and has no `from`. Ignoring it; bind the camera to a poseHelm for view- or world-relative motion.');
   }
   if (_isCameraState(cam)) helm.home(cameraToPose(_pose, cam));
   const player = {

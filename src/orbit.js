@@ -23,7 +23,7 @@
  * what is still draining, so do home() and enabled = false. The default is
  * 0.2 s; 0 makes the orbit exact.
  *
- * Screen y runs down; which world direction that is depends on the
+ * Canvas y runs down; which world direction that is depends on the
  * projection installed in the view bag: a y-up projection (GL's, tree's
  * default) maps a downward drag to the eye's −up, a y-flipped one (p5's,
  * mat4Proj[5] < 0) to +up. The orbit reads that sign off the bag each
@@ -141,7 +141,7 @@ export function createOrbit(host, cam, opts) {
       let moved = false;
       let az = 0, el = 0, px = 0, py = 0, ld = 0;   // this frame's step
       const view = host.view;
-      const ys = view.mat4Proj[5] < 0 ? -1 : 1;   // screen-down is the eye's −up under a y-up projection, +up under p5's flip
+      const ys = view.mat4Proj[5] < 0 ? -1 : 1;   // canvas-down is the eye's −up under a y-up projection, +up under p5's flip
       if (a !== null && b === null) {
         const t = tracked.get(a.id);
         if (t) {
