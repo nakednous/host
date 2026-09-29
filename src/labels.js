@@ -1,5 +1,5 @@
 /**
- * @file The label layer — DOM text over the canvas, anchored in world or canvas space.
+ * @file The label layer — DOM text over the canvas, anchored in world or screen space.
  * @module host/labels
  * @license AGPL-3.0-only
  *

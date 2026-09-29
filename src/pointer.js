@@ -8,7 +8,7 @@
  *
  * - pointerdown · pointermove · pointerup · pointercancel on the canvas,
  *   keydown (Esc) on the window.
- * - Coordinates in canvas space — the canvas's logical pixels, top-left, y
+ * - Coordinates in screen space — the surface's logical pixels, top-left, y
  *   down — through the element's bounding rectangle: (clientX − rect.left) ·
  *   (width / rect.width), the logical size read off the view bag's vp. These
  *   are the numbers mapLocation(SCREEN) and vp expect (a viewport of negative

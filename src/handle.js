@@ -368,14 +368,14 @@ export class Handle {
     return rayHitSphere(o[0], o[1], o[2], d[0], d[1], d[2], p[0], p[1], p[2], this._proxyRad);
   }
 
-  /** Unproject a canvas pixel into the ray scratch; false on a stale view. */
+  /** Unproject a screen-space pixel into the ray scratch; false on a stale view. */
   _ray(x, y) {
     const v = this._view;
     if (v.stale) return false;
     return unproject(_rayO, _rayD, x, y, v, v.vp, v.ndcZMin) !== null;
   }
 
-  /** Hit-test the proxy at a canvas pixel. */
+  /** Hit-test the proxy at a screen-space pixel. */
   _pickAt(x, y) {
     return this._ray(x, y) && this._proxyT(_rayO, _rayD) < Infinity;
   }
