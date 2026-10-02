@@ -6,8 +6,14 @@
  * poseTrack(host, opts) is a core PoseTrack whose activation hooks add and
  * remove its player. cameraTrack(host, cam, opts) is a core CameraTrack whose
  * player evaluates straight into the camera state `cam` — the state is the
- * keyframe shape, so track.eval(cam) is the write — and once more on
- * deactivate so the camera rests on the path; add() with no argument
+ * keyframe shape, so track.eval(cam) is the write — while the track plays, and
+ * once more on deactivate so the camera rests on the path. That bound is the
+ * point: a stopped track's camera belongs to whoever else drives it — the
+ * reader's orbit, the figure's own camera code — so a consumer that renders
+ * from the state derives it instead, one evaluation per frame after the tick
+ * that advances the transport, which carries a seek, a dragged keyframe and a
+ * capture into the state as well and repeats the player's write harmlessly
+ * while the track plays. add() with no argument
  * captures `cam`, add({ camera }) any camera-state object. { handles } on
  * either decorates the track with TrackHandles: one VIEW handle per
  * draggable keyframe field (pos / eye / center), an optional rot DIAL per
@@ -117,7 +123,17 @@ export function poseTrack(host, opts) {
 }
 
 /**
- * A core CameraTrack evaluating into the camera state `cam` while it plays.
+ * A core CameraTrack evaluating into the camera state `cam` while it plays, and
+ * once when it stops, so the camera rests on the path.
+ *
+ * The write is bounded by playback on purpose: while a track is stopped the
+ * camera it names belongs to whoever else drives it — the reader's orbit, the
+ * figure's own camera code — and a factory writing every frame would fight
+ * them. A consumer that renders *from* the state therefore derives it: evaluate
+ * the track once per frame, after the tick that advances the transport. A seek,
+ * a dragged keyframe and a capture reach the state that way too, and the
+ * evaluation repeats the player's own write harmlessly while the track plays.
+ *
  * @param {object} host
  * @param {object} cam   A camera state ({ eye, center, up, fov, halfHeight, near, far }).
  * @param {{ handles?:boolean|object }} [opts]
