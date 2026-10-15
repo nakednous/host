@@ -1,7 +1,7 @@
 {
   "name": "@nakednous/host",
-  "version": "0.0.9",
-  "description": "host — DOM transport for @nakednous/tree: pointer, handles, players, device streams, media. Zero renderer.",
+  "version": "0.0.10",
+  "description": "host \u2014 DOM transport for @nakednous/tree: pointer, handles, players, device streams, media. Zero renderer.",
   "type": "module",
   "main": "dist/index.js",
   "module": "dist/index.js",

@@ -58,6 +58,7 @@ export { cameraHelm, poseHelm, helmBasis } from './helm.js';
 export { poseTrack, cameraTrack, TrackHandles } from './track.js';
 export { createHid, createGamepad, decodeSpaceNavigator, HID_FILTERS, GAMEPAD_MAP } from './stream.js';
 export { loadImage, createVideo, raster, loadMesh, loadModel } from './media.js';
+export { decodeRGBE, encodeRGBE } from './hdr.js';
 export { createLabels } from './labels.js';
 export { createOrbit } from './orbit.js';
 
