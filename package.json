@@ -1,6 +1,6 @@
 {
   "name": "@nakednous/host",
-  "version": "0.0.10",
+  "version": "0.0.11",
   "description": "host \u2014 DOM transport for @nakednous/tree: pointer, handles, players, device streams, media. Zero renderer.",
   "type": "module",
   "main": "dist/index.js",
@@ -42,10 +42,10 @@
     "url": "git+https://github.com/nakednous/host.git"
   },
   "dependencies": {
-    "@nakednous/tree": "^0.0.32"
+    "@nakednous/tree": "^0.0.34"
   },
   "devDependencies": {
     "@rollup/plugin-node-resolve": "^16.0.3",
-    "rollup": "^4.63.6"
+    "rollup": "^4.64.8"
   }
 }

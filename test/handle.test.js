@@ -7,7 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  createCamera, mapLocation, SCREEN, WORLD, EYE, PLANE, AXIS, DIAL, SPHERE, POINT,
+  createCamera, mapLocation, SCREEN, WORLD, EYE, PLANE, AXIS, DIAL, SPHERE, POINT, DIRECTION,
 } from '@nakednous/tree';
 import { createHost, VIEW } from '../src/index.js';
 import { createCanvas, installWindow } from './dom.js';
@@ -25,6 +25,15 @@ function setup() {
 const press = (c, id, x, y) => c.dispatch('pointerdown', { pointerId: id, clientX: x, clientY: y });
 const move  = (c, id, x, y) => c.dispatch('pointermove', { pointerId: id, clientX: x, clientY: y });
 const up    = (c, id, x, y) => c.dispatch('pointerup',   { pointerId: id, clientX: x, clientY: y });
+/** The canvas pixel a world point projects to. */
+function screenOf(host, p) {
+  const v = host.view;
+  return mapLocation([0, 0, 0], p[0], p[1], p[2], WORLD, SCREEN, v, v.vp, v.ndcZMin);
+}
+
+/** A vec3 rounded for comparison — a heading is f64 and a drag renormalizes it. */
+const round3 = (v) => v.map((n) => Math.round(n * 1e6) / 1e6 || 0);
+
 /** The world point under canvas pixel (x, y) at the depth of the origin. */
 function worldAt(host, x, y) {
   const v = host.view, s = [0, 0, 0];
@@ -189,4 +198,45 @@ test('host: dispose releases handles and their claims; an invalid constraint yie
   host.dispose();
   assert.ok(!canvas.captured.has(1));
   assert.equal(h._pointer, null);
+});
+
+test('handle: a bound SPHERE heading stays in the handle\'s report space — seed, write, re-seed', () => {
+  const { canvas, host } = setup();
+  const dir = [0, 0, -1];
+  const anchor = [0, 0, 40], radius = 60;
+  // a heading handle off the origin: the case where a point reading and a direction
+  // reading disagree, and where the seed used to be measured from the anchor
+  const h = host.handle({ constraint: SPHERE, report: DIRECTION, anchor, radius, bind: dir, grabPx: 20 });
+  assert.deepEqual(round3(h.value([0, 0, 0])), [0, 0, -1]);
+
+  // the dot is at anchor + dir·radius; grab it and drag it aside
+  const p = screenOf(host, [anchor[0], anchor[1], anchor[2] - radius]);
+  press(canvas, 1, p[0], p[1]); h.update();
+  move(canvas, 1, p[0] + 40, p[1] - 20); h.update();
+  up(canvas, 1, p[0] + 40, p[1] - 20); h.update();
+  assert.ok(Math.abs(Math.hypot(...dir) - 1) < 1e-9, 'the bound array holds a unit heading');
+  assert.notDeepEqual(round3(dir), [0, 0, -1]);
+
+  // an external change is re-seeded in that same space, so nothing drifts
+  dir[0] = 1; dir[1] = 0; dir[2] = 0;
+  h.sync();
+  assert.deepEqual(round3(h.value([0, 0, 0])), [1, 0, 0]);
+
+  // Escape cancels a grab back to the heading it took, not to a point
+  const q = screenOf(host, [anchor[0] + radius, anchor[1], anchor[2]]);
+  press(canvas, 2, q[0], q[1]); h.update();
+  move(canvas, 2, q[0] - 30, q[1] + 30); h.update();
+  win.dispatch('keydown', { key: 'Escape' }); h.update();
+  assert.deepEqual(round3(h.value([0, 0, 0])), [1, 0, 0], 'cancel restores the heading it took');
+});
+
+test('handle: a SPHERE handle in POINT mode still binds a point on its locus', () => {
+  const { host } = setup();
+  const point = [60, 0, 40];
+  const h = host.handle({ constraint: SPHERE, report: POINT, anchor: [0, 0, 40], radius: 60, bind: point });
+  assert.deepEqual(round3(h.value([0, 0, 0])), point);                        // POINT read
+  assert.deepEqual(round3(h.value([0, 0, 0], { report: DIRECTION })), [1, 0, 0]);   // the heading it holds
+  point[0] = 0; point[1] = 60; point[2] = 40;
+  h.sync();
+  assert.deepEqual(round3(h.value([0, 0, 0], { report: DIRECTION })), [0, 1, 0]);
 });

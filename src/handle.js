@@ -317,7 +317,7 @@ export class Handle {
       c.s = this._savedS;
       c._dialPoint();
     } else {
-      c.seed(this._saved[0], this._saved[1], this._saved[2]);
+      c.seed(this._saved[0], this._saved[1], this._saved[2], POINT);
     }
     if (this._binder) this._binder.set(this.value(this._bindVal));
     this._grabbed = false;
@@ -411,7 +411,7 @@ export class Handle {
       _v3[1] = gy > 0 ? Math.round(c.pt[1] / gy) * gy : c.pt[1];
       _v3[2] = gz > 0 ? Math.round(c.pt[2] / gz) * gz : c.pt[2];
       if (this._isView) { c.pt[0] = _v3[0]; c.pt[1] = _v3[1]; c.pt[2] = _v3[2]; }
-      else c.seed(_v3[0], _v3[1], _v3[2]);
+      else c.seed(_v3[0], _v3[1], _v3[2], POINT);
     } else if (c.kind === AXIS || c.kind === DIAL) {
       const step = Array.isArray(sn) ? sn[0] : sn;
       if (!(step > 0)) return;
@@ -458,6 +458,11 @@ export class Handle {
    * accessor, or a vec3 array mutated in place (a camera state's eye or
    * center is one). get() seeds the constraint now; each solve calls
    * set(value) with the reused value array, then fires onChange. Chainable.
+   *
+   * The array lives in the handle's `report` space, both ways: a SPHERE handle
+   * (DIRECTION by default) binds and receives a **unit heading**, not a point on
+   * its sphere; a PLANE / AXIS handle binds and receives a world point. Construct
+   * the handle with `report: POINT` to bind a point to a sphere instead.
    * @param {number[]|{ get:Function, set:Function }} target
    * @returns {Handle} this
    */
@@ -477,7 +482,9 @@ export class Handle {
     return this;
   }
 
-  /** Re-seed the constraint from the bound target after it changed externally. Chainable. */
+  /** Re-seed the constraint from the bound target after it changed externally —
+   *  the target holds the handle's own `report` space, as the write-back does, so
+   *  seed → solve → write never changes what the array means. Chainable. */
   sync() {
     if (this._binder) this._seedFromBinding();
     return this;
@@ -488,7 +495,7 @@ export class Handle {
     if (g == null) return;
     const x = _vx(g, 0, 0), y = _vx(g, 1, 0), z = _vx(g, 2, 0);
     if (this._isView) { const pt = this._constraint.pt; pt[0] = x; pt[1] = y; pt[2] = z; }
-    else this._constraint.seed(x, y, z);
+    else this._constraint.seed(x, y, z, this._constraint.report);
   }
 
   // Push the freshly solved value to the binding and fire onChange, once per solve.
@@ -539,7 +546,7 @@ export class Handle {
         c.pt[0] = c.anchor[0] + c.s * c.u[0];
         c.pt[1] = c.anchor[1] + c.s * c.u[1];
         c.pt[2] = c.anchor[2] + c.s * c.u[2];
-      } else if (c.kind === PLANE) c.seed(c.pt[0], c.pt[1], c.pt[2]);
+      } else if (c.kind === PLANE) c.seed(c.pt[0], c.pt[1], c.pt[2], POINT);
     }
     return this;
   }
