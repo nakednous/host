@@ -70,7 +70,7 @@ dependency first and an options object last, and registers with the context so
 
 | member | what it is |
 |---|---|
-| `createHost(canvas, opts)` | the context: `ndcZMin` (WEBGL default, or WEBGPU), `onFrame(dt, host)` for the host's own loop, `onSize(w, h, dpr)` for the bridge's buffer, `raf` / `caf` overrides |
+| `createHost(canvas, opts)` | the context: `ndcZMin` (WEBGL default, or WEBGPU), `onFrame(dt, host)` for the host's own loop, `afterFrame(dt, host)` after the pointer flush — the frame's last draw, a pointer handler's included, where a WebGPU bridge submits its command encoder — `onSize(w, h, dpr)` for the bridge's buffer, `raf` / `caf` overrides |
 | `host.view` | the view bag — `mat4Proj` · `mat4View` · `mat4PV` · `mat4PVInv` · `mat4Eye`, `vp`, `ndcZMin`, `stale`; `set(P, V)`, `setCamera(cam)`, `resize(w, h)` |
 | `host.pointer` | the pointer source — presses queued per frame, per-pointer entries with a move counter, claims that capture on the canvas, Esc cancel, `flush()` |
 | `host.players` | the registry ticked each frame — `{ tick(dt) → boolean }`, removed on `false` |
@@ -116,6 +116,10 @@ one wrote:
 5. **draw** — the bridge reads the camera state, the handles' values, the tracks' paths.
 6. **labels tick** — world anchors projected through the current bag, transforms written.
 7. **pointer flush** — the press queue empties, released pointers leave.
+8. **the post-frame hook** — `afterFrame(dt, host)`, when it was given: the frame's last draw,
+   a pointer handler's included, so a WebGPU bridge submits its command encoder there. It is
+   the host's loop's step and nothing in external tick — there the caller writes the frame's
+   end — and `host.dispose()` clears it.
 
 `dt` is seconds, clamped to 50 ms so a stalled tab never integrates a leap.
 
@@ -126,6 +130,7 @@ one wrote:
 | seam | direction | contract |
 |---|---|---|
 | view bag | bridge → host | the bridge's `setCamera(cam)` also calls `host.view.setCamera(cam)`; without a host the bridge keeps its own matrices |
+| frame end | host → bridge | `afterFrame(dt, host)` runs after `pointer.flush()`; a WebGPU bridge submits its command encoder there, and without the hook the application calls the bridge's `endFrame` itself |
 | external tick | adapter → host | `host.tick(dt)` from the adapter's predraw; `host.labels.tick()` after the adapter set `host.view` from renderer state |
 | proxies · locus | tree → host → bridge | constraint objects carry `proxy` and `locus`; the host tests, the bridge draws |
 | label anchors | tree → bridge → host | a generator writes `out.labels`; the bridge forwards each to `labels.set` |

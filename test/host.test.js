@@ -217,3 +217,64 @@ test('host: loop mode ticks players, calls onFrame, then flushes the pointer', (
   host.dispose();
   assert.equal(queue.length, 0);
 });
+
+test('host: afterFrame runs after the pointer flush, once a frame, behind players and onFrame', () => {
+  const canvas = createCanvas();
+  const queue = [];
+  const order = [];
+  const periods = [];
+  const host = createHost(canvas, {
+    raf: (cb) => { queue.push(cb); return queue.length; }, caf: () => { queue.length = 0; },
+    onFrame: (dt, h) => {
+      order.push('onFrame');
+      assert.equal(h, host);
+      assert.equal(h.pointer.presses.length, 1);   // the flush has not run yet
+      periods.push(dt);
+    },
+    afterFrame: (dt, h) => {
+      order.push('afterFrame');
+      assert.equal(h, host);
+      assert.equal(h.pointer.presses.length, 0);   // the flush ran before it
+      assert.equal(dt, periods[periods.length - 1]);
+    },
+  });
+  host.players.add({
+    tick() { order.push('tick'); assert.equal(host.pointer.presses.length, 1); return true; },
+  });
+  canvas.dispatch('pointerdown', { pointerId: 4, clientX: 2, clientY: 3 });
+  queue.shift()();
+  assert.deepEqual(order, ['tick', 'onFrame', 'afterFrame']);
+  assert.equal(host.pointer.presses.length, 0);
+  canvas.dispatch('pointerdown', { pointerId: 5, clientX: 4, clientY: 6 });
+  queue.shift()();
+  assert.deepEqual(order, ['tick', 'onFrame', 'afterFrame', 'tick', 'onFrame', 'afterFrame']);
+  host.dispose();
+});
+
+test('host: afterFrame belongs to the host loop — external tick writes its own frame end', () => {
+  const canvas = createCanvas();
+  let after = 0;
+  const host = createHost(canvas, { afterFrame: () => { after++; } });
+  host.tick(0.25);
+  host.pointer.flush();
+  assert.equal(after, 0);
+  assert.equal(host.dt, 0.25);
+  host.dispose();
+});
+
+test('host: dispose clears afterFrame, so a frame that disposes the host does not reach it', () => {
+  const canvas = createCanvas();
+  const queue = [];
+  const cancelled = [];
+  let frames = 0, after = 0;
+  const host = createHost(canvas, {
+    raf: (cb) => { queue.push(cb); return queue.length; }, caf: (id) => { cancelled.push(id); },
+    onFrame: () => { frames++; host.dispose(); },
+    afterFrame: () => { after++; },
+  });
+  queue.shift()();
+  assert.equal(frames, 1);
+  assert.equal(after, 0);
+  assert.equal(cancelled.length, 1);
+  assert.equal(queue.length, 0);
+});

@@ -23,10 +23,14 @@
  *
  * Two loop modes. With { onFrame } the host runs requestAnimationFrame
  * (overridable through { raf, caf }): each frame computes dt (clamped to
- * 50 ms), ticks the players, calls onFrame(dt, host), then flushes the
- * pointer source. Without it the application, or the p5 adapter from
- * predraw, calls host.tick(dt) = players.tick(dt) and host.pointer.flush()
- * once its consumers ran. Nothing else in the host cares who owns the loop.
+ * 50 ms), ticks the players, calls onFrame(dt, host), flushes the pointer
+ * source, then calls afterFrame(dt, host) when one was given — the frame's
+ * last draw, a pointer handler's included, which is where a WebGPU bridge
+ * submits its command encoder. Without it the application, or the p5
+ * adapter from predraw, calls host.tick(dt) = players.tick(dt) and
+ * host.pointer.flush() once its consumers ran: external tick gains no
+ * frame end, so afterFrame belongs to the host's own loop. Nothing else in
+ * the host cares who owns the loop.
  *
  * The frame order inside onFrame: install the camera (which fills
  * host.view), update handles or routers, fall through to the orbit when
@@ -68,12 +72,18 @@ const _now = () => (typeof performance !== 'undefined' && performance.now) ? per
  * Create the host context of a canvas.
  *
  * @param {HTMLCanvasElement} canvas
- * @param {{ ndcZMin?:number, onFrame?:function(number, object):void, raf?:function,
+ * @param {{ ndcZMin?:number, onFrame?:function(number, object):void,
+ *           afterFrame?:function(number, object):void, raf?:function,
  *           caf?:function, onSize?:function(number, number, number):void }} [opts]
  *        ndcZMin: the GPU API's NDC-z convention, WEBGL (default) or WEBGPU —
  *        written once, never detected. onFrame: the host's own loop; absent,
- *        external-tick mode. onSize(width, height, dpr): the bridge's chance
- *        to resize its drawing buffer.
+ *        external-tick mode. afterFrame: called after the pointer source
+ *        flushes, so the frame's last draw — a pointer handler's included —
+ *        is behind it; the submit seam of a WebGPU bridge, which ends its
+ *        command encoder there. The host's loop only: an external tick has
+ *        no frame end but the one its caller writes. dispose() clears it.
+ *        onSize(width, height, dpr): the bridge's chance to resize its
+ *        drawing buffer.
  * @returns {object} The host.
  */
 export function createHost(canvas, opts) {
@@ -81,6 +91,7 @@ export function createHost(canvas, opts) {
   const t0 = _now();
   const constructs = new Set();
   let loop = null, observer = null, labels = null;
+  let afterFrame = typeof o.afterFrame === 'function' ? o.afterFrame : null;
   const host = {
     canvas,
     width: 0, height: 0, dpr: 1,
@@ -162,6 +173,7 @@ export function createHost(canvas, opts) {
 
     /** Stop the loop, disconnect the observer, remove every listener, dispose every construct. */
     dispose() {
+      afterFrame = null;
       if (loop) loop.stop();
       for (const c of [...constructs]) { if (typeof c.dispose === 'function') c.dispose(); }
       constructs.clear();
@@ -190,6 +202,7 @@ export function createHost(canvas, opts) {
         host.players.tick(dt);
         o.onFrame(dt, host);
         host.pointer.flush();
+        if (afterFrame !== null) afterFrame(dt, host);
       },
     });
     loop.start();
