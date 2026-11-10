@@ -98,7 +98,14 @@ export function createHost(canvas, opts) {
     dt: 0,
     view: null, pointer: null, players: null,
 
-    /** Seconds since the host was created. */
+    /**
+     * Seconds since the host was created.
+     *
+     * TODO(origin): take an origin — an epoch-ms instant the clock counts
+     * from — so figures that share a page can show one instant, instead of
+     * each figure's own start, which its document settles. Nothing asks for
+     * it yet: figures that need to agree read a shared clock of their own.
+     */
     clock() { return (_now() - t0) / 1000; },
 
     /**
