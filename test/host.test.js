@@ -175,6 +175,17 @@ test('loop: a fake raf drives onFrame with a clamped dt; stop cancels', () => {
   assert.equal(queue.length, 0);
 });
 
+test('clock: counts from creation, or from the origin it was given', () => {
+  const now = performance.timeOrigin + performance.now();
+  const mine = createHost(createCanvas({ rect: { left: 0, top: 0, width: 100, height: 100 } }));
+  assert.ok(mine.clock() >= 0 && mine.clock() < 0.5, 'a fresh host is at zero');
+  const page = createHost(createCanvas({ rect: { left: 0, top: 0, width: 100, height: 100 } }), { origin: now - 2000 });
+  assert.ok(page.clock() >= 2 && page.clock() < 2.5, 'the origin sets the zero');
+  const junk = createHost(createCanvas({ rect: { left: 0, top: 0, width: 100, height: 100 } }), { origin: 'yesterday' });
+  assert.ok(junk.clock() >= 0 && junk.clock() < 0.5, 'a non-number origin is creation');
+  mine.dispose(); page.dispose(); junk.dispose();
+});
+
 test('host: external-tick mode wires view, pointer, players and the observer; dispose releases all', () => {
   const canvas = createCanvas({ rect: { left: 0, top: 0, width: 400, height: 300 } });
   const sizes = [];

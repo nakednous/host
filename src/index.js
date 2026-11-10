@@ -67,6 +67,9 @@ export { createLabels } from './labels.js';
 export { createOrbit } from './orbit.js';
 
 const _now = () => (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+// The clock's own reading: epoch milliseconds, so a host can be told where its
+// zero is. Monotonic where performance.now is, since timeOrigin never moves.
+const _epoch = () => (typeof performance !== 'undefined' && performance.timeOrigin) ? performance.timeOrigin + performance.now() : Date.now();
 
 /**
  * Create the host context of a canvas.
@@ -74,7 +77,8 @@ const _now = () => (typeof performance !== 'undefined' && performance.now) ? per
  * @param {HTMLCanvasElement} canvas
  * @param {{ ndcZMin?:number, onFrame?:function(number, object):void,
  *           afterFrame?:function(number, object):void, raf?:function,
- *           caf?:function, onSize?:function(number, number, number):void }} [opts]
+ *           caf?:function, onSize?:function(number, number, number):void,
+ *           origin?:number }} [opts]
  *        ndcZMin: the GPU API's NDC-z convention, WEBGL (default) or WEBGPU —
  *        written once, never detected. onFrame: the host's own loop; absent,
  *        external-tick mode. afterFrame: called after the pointer source
@@ -83,12 +87,14 @@ const _now = () => (typeof performance !== 'undefined' && performance.now) ? per
  *        command encoder there. The host's loop only: an external tick has
  *        no frame end but the one its caller writes. dispose() clears it.
  *        onSize(width, height, dpr): the bridge's chance to resize its
- *        drawing buffer.
+ *        drawing buffer. origin: the epoch-ms instant `clock()` counts from,
+ *        default the host's creation — pass a page's `performance.timeOrigin`
+ *        and the figures a page embeds share one start.
  * @returns {object} The host.
  */
 export function createHost(canvas, opts) {
   const o = opts || {};
-  const t0 = _now();
+  const origin = (typeof o.origin === 'number' && Number.isFinite(o.origin)) ? o.origin : _epoch();
   const constructs = new Set();
   let loop = null, observer = null, labels = null;
   let afterFrame = typeof o.afterFrame === 'function' ? o.afterFrame : null;
@@ -98,15 +104,8 @@ export function createHost(canvas, opts) {
     dt: 0,
     view: null, pointer: null, players: null,
 
-    /**
-     * Seconds since the host was created.
-     *
-     * TODO(origin): take an origin — an epoch-ms instant the clock counts
-     * from — so figures that share a page can show one instant, instead of
-     * each figure's own start, which its document settles. Nothing asks for
-     * it yet: figures that need to agree read a shared clock of their own.
-     */
-    clock() { return (_now() - t0) / 1000; },
+    /** Seconds since the host was created — or since the `origin` it was given. */
+    clock() { return (_epoch() - origin) / 1000; },
 
     /**
      * External-loop mode: tick the players with dt (seconds). The caller

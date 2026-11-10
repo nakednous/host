@@ -75,7 +75,7 @@ dependency first and an options object last, and registers with the context so
 | `host.pointer` | the pointer source — presses queued per frame, per-pointer entries with a move counter, claims that capture on the canvas, Esc cancel, `flush()` |
 | `host.players` | the registry ticked each frame — `{ tick(dt) → boolean }`, removed on `false` |
 | `host.width` · `host.height` · `host.dpr` | the canvas observer's logical size and pixel ratio |
-| `host.dt` · `host.clock()` | last frame period and seconds since creation |
+| `host.dt` · `host.clock()` | last frame period and seconds since creation — or since the `origin` the host was given, an epoch-ms instant a page passes so the figures it embeds share one start |
 | `host.handle(opts)` | `Handle` — a draggable core constraint (`SPHERE` · `PLANE` · `AXIS` · `DIAL` · `VIEW`, or a contract object); `update()`, `value(out, opts)`, snap, hover, cancel, `from` |
 | `host.router(handles, opts)` | `PointerRouter` — one shared pick over overlapping handles, nearest proxy wins; shared hover |
 | `host.cameraHelm(cam, opts)` · `host.poseHelm(opts)` | a core `PoseHelm` on the players: body-fly a camera state, or integrate into a pose in `WORLD` · `EYE` · `SELF` · a mat4 and `bind()` a target |
