@@ -234,6 +234,7 @@ export class Handle {
     // hit-tested at its pixel; a hit claims the pointer, a miss leaves it.
     if (!this._routed && this._pid === null) {
       for (const pr of src.presses) {
+        if ((pr.button ?? 0) !== 0) continue;       // a grab is a primary press; the secondary pans
         if (src.ownerOf(pr.id) !== null) continue;
         this._ptr[0] = pr.x; this._ptr[1] = pr.y;
         if (this._pickAt(pr.x, pr.y)) { this._adopt(pr.id, pr.x, pr.y); break; }

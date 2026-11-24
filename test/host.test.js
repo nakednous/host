@@ -82,10 +82,13 @@ test('pointer: presses queue in canvas px, moves count, claims capture, flush en
   const view = createView({ width: 400, height: 300 });
   const src = createPointer(canvas, view);
   canvas.dispatch('pointerdown', { pointerId: 7, clientX: 300, clientY: 350 });
-  assert.deepEqual(src.presses, [{ id: 7, x: 100, y: 150 }]);   // CSS px halved to logical
+  assert.deepEqual(src.presses, [{ id: 7, x: 100, y: 150, button: 0, shift: false }]);   // CSS px halved to logical
   const p = src.get(7);
   assert.equal(p.down, true);
   assert.equal(p.seq, 1);
+  assert.equal(p.button, 0);                       // the press's own facts, latched
+  assert.equal(p.shift, false);
+  assert.equal(p.buttons, 0);                      // the synthetic event carries no mask
   canvas.dispatch('pointermove', { pointerId: 7, clientX: 320, clientY: 350 });
   assert.equal(p.seq, 2);
   near(p.x, 110);

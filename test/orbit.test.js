@@ -5,7 +5,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createCamera } from '@nakednous/tree';
+import { createCamera, SPHERE, DIRECTION } from '@nakednous/tree';
 import { createHost } from '../src/index.js';
 import { createCanvas, installWindow } from './dom.js';
 
@@ -20,9 +20,10 @@ function rig(opts) {
   const cam = createCamera({ eye: [0, 0, 10], center: [0, 0, 0], up: [0, 1, 0], fov: Math.PI / 2, near: 1, far: 100 });
   host.view.setCamera(cam);
   const orbit = host.orbit(cam, Object.assign({ damping: 0 }, opts));   // exact unless a test asks
-  const down = (id, x, y) => canvas.dispatch('pointerdown', { pointerId: id, clientX: x, clientY: y });
-  const move = (id, x, y) => canvas.dispatch('pointermove', { pointerId: id, clientX: x, clientY: y });
-  const up = (id) => canvas.dispatch('pointerup', { pointerId: id, clientX: 0, clientY: 0 });
+  const ev = (id, x, y, more) => Object.assign({ pointerId: id, clientX: x, clientY: y }, more);
+  const down = (id, x, y, more) => canvas.dispatch('pointerdown', ev(id, x, y, more));
+  const move = (id, x, y, more) => canvas.dispatch('pointermove', ev(id, x, y, more));
+  const up = (id, more) => canvas.dispatch('pointerup', ev(id, 0, 0, more));
   const frame = (dt) => { const m = orbit.update(dt); host.pointer.flush(); return m; };
   return { canvas, host, cam, orbit, down, move, up, frame };
 }
@@ -207,5 +208,156 @@ test('orbit: the wheel dollies through the lag with the exact dolly\'s travel; d
   assert.equal(frame(DT), true);
   near(cam.eye[2], 10, 1e-3);                          // exact, in one frame
   assert.equal(frame(DT), false);
+  host.dispose();
+});
+
+// ── the pan feeder: a secondary or Shift+primary press moves the pair ──────
+
+test('orbit: a secondary press pans by its own drag; a Shift+primary press does the same', () => {
+  const a = rig();
+  a.down(1, 100, 150, { button: 2 }); a.frame();
+  a.move(1, 110, 150);                                    // +10 px: 10 · 20/300 world at the pivot's depth
+  assert.equal(a.frame(), true);
+  near3(a.cam.eye, [-2 / 3, 0, 10]);                      // the scene follows the drag, as the two-pointer pan does
+  near3(a.cam.center, [-2 / 3, 0, 0]);
+  assert.equal(a.frame(), false);
+  a.host.dispose();
+
+  const b = rig();
+  b.down(1, 100, 150, { shiftKey: true }); b.frame();
+  b.move(1, 110, 150);
+  assert.equal(b.frame(), true);
+  near3(b.cam.eye, [-2 / 3, 0, 10]);
+  b.host.dispose();
+});
+
+test('orbit: pan: 0 disables the feeder; a press no feeder claims still turns', () => {
+  const { cam, down, move, frame, host } = rig({ rotate: 0.01, pan: 0 });
+  down(1, 100, 100, { button: 2 }); frame();
+  move(1, 110, 100); frame();
+  near3(cam.center, [0, 0, 0]);                           // no pan
+  assert.ok(Math.abs(cam.eye[0]) > 0);                    // and it turned, as every press did before
+  host.dispose();
+});
+
+test('orbit: a secondary press on a dot pans; the dot is only ever grabbed by a primary press', () => {
+  const canvas = createCanvas({ rect: { left: 0, top: 0, width: 400, height: 300 } });
+  canvas.style = {};
+  const host = createHost(canvas);
+  const cam = createCamera({ eye: [0, 0, 10], center: [0, 0, 0], fov: Math.PI / 2, near: 1, far: 100 });
+  host.view.setCamera(cam);
+  const dot = host.handle({ constraint: SPHERE, anchor: [0, 0, 0], radius: 1, report: DIRECTION });
+  const orbit = host.orbit(cam, { damping: 0 });
+  const frame = () => { dot.update(); const m = orbit.update(); host.pointer.flush(); return m; };   // the gate: the grab resolves first
+  canvas.dispatch('pointerdown', { pointerId: 1, clientX: 200, clientY: 150, button: 2 });
+  frame();
+  assert.equal(host.pointer.ownerOf(1), orbit);            // the pan claimed it; the dot did not
+  assert.equal(dot._pid, null);
+  canvas.dispatch('pointerup', { pointerId: 1, clientX: 200, clientY: 150 });
+  frame();
+  canvas.dispatch('pointerdown', { pointerId: 2, clientX: 200, clientY: 150 });
+  frame();
+  assert.equal(host.pointer.ownerOf(2), dot);              // a primary press grabs, as ever
+  host.dispose();
+});
+
+test('orbit: a chord neither re-latches the lane nor ends the drag; a partial release is a move', () => {
+  const { cam, down, move, up, frame, host } = rig({ rotate: 0.01 });
+  const az = () => Math.atan2(cam.eye[0], cam.eye[2]);
+  down(1, 100, 100); frame();
+  move(1, 110, 100); frame();                             // orbit: −0.1 rad
+  const a0 = az();
+  move(1, 110, 100, { buttons: 3 }); frame();             // the secondary joins: no motion, no lane change
+  near(az(), a0);
+  near(cam.eye[0], 10 * Math.sin(a0));
+  move(1, 120, 100, { buttons: 3 }); frame();             // still the orbit lane
+  near(az(), a0 - 0.1);
+  up(1, { buttons: 1 }); frame();                         // release the secondary only
+  assert.equal(host.pointer.get(1).down, true);
+  move(1, 130, 100, { buttons: 1 }); frame();
+  near(az(), a0 - 0.2);
+  host.dispose();
+});
+
+test('orbit: every press edge drops the drain, even an immediate repress in the same frame', () => {
+  const { cam, down, move, up, frame, host } = rig({ rotate: 0.01, damping: 0.5 });
+  down(1, 100, 100); frame(DT);
+  move(1, 200, 100); frame(DT);                           // a rate is draining
+  up(1);
+  down(1, 200, 100);                                      // pressed again before the frame flushed
+  assert.equal(frame(DT), false);                         // caught where it is: nothing moves, nothing drains
+  near(azOf(cam), -(1 - Math.exp(-DT / 0.5)), 1e-6);
+  host.dispose();
+});
+
+test('orbit: a release keeps its tail; a pointercancel and Esc abort it', () => {
+  const r = rig({ rotate: 0.01, damping: 0.5 });
+  r.down(1, 100, 100); r.frame(DT); r.move(1, 200, 100); r.frame(DT);
+  r.canvas.dispatch('pointercancel', { pointerId: 1 });
+  assert.equal(r.frame(DT), false);
+  const frozen = azOf(r.cam);
+  assert.equal(r.frame(DT), false);
+  near(azOf(r.cam), frozen);
+  r.host.dispose();
+
+  const p = rig({ damping: 0.5 });
+  p.down(1, 100, 150, { button: 2 }); p.frame(DT);
+  p.move(1, 200, 150);
+  assert.equal(p.frame(DT), true);
+  globalThis.window.dispatch('keydown', { key: 'Escape' });   // the claimed pointer, so pointer.js's Esc reaches it
+  assert.equal(p.frame(DT), false);
+  const x = p.cam.eye[0];
+  assert.equal(p.frame(DT), false);
+  near(p.cam.eye[0], x);
+  p.host.dispose();
+});
+
+test("orbit: a pan follows the damping law — the drag's own travel, no more", () => {
+  const { cam, down, move, up, frame, host } = rig({ damping: 0.25 });
+  down(1, 100, 150, { button: 2 }); frame(DT);
+  near3(cam.eye, [0, 0, 10]);                             // the press alone moves nothing
+  move(1, 130, 150); frame(DT);
+  up(1);
+  let n = 0; while (frame(DT)) n++;
+  assert.ok(n > 10, `${n} frames`);
+  near(cam.eye[0], -30 / 15, 1e-3);                       // 30 px · 20/300 world per px, to the drain's cutoff
+  near(cam.center[0], -30 / 15, 1e-3);
+  host.dispose();
+});
+
+test('orbit: contextmenu follows a bound pan; ctrl+wheel dollies, Shift and horizontal wheel pan', () => {
+  const { canvas, cam, orbit, frame, host } = rig();
+  let prevented = 0;
+  const w = (more) => Object.assign({ preventDefault: () => prevented++ }, more);
+  canvas.dispatch('contextmenu', w({}));
+  assert.equal(prevented, 1);
+  canvas.dispatch('wheel', w({ deltaY: 15, shiftKey: true, deltaMode: 0 })); frame();
+  near(cam.eye[0], -1);                                   // 15 px · 20/300, the scene follows the scroll
+  canvas.dispatch('wheel', w({ deltaX: -30, deltaMode: 0 })); frame();
+  near(cam.eye[0], 1);
+  canvas.dispatch('wheel', w({ deltaY: 100, ctrlKey: true, deltaMode: 0 })); frame();
+  near(cam.eye[0], 1);                                    // the pinch never pans
+  near(cam.eye[2], 10 * Math.exp(0.1), 1e-6);
+  orbit.pan = 0;
+  prevented = 0;
+  canvas.dispatch('contextmenu', w({}));
+  assert.equal(prevented, 0);                             // a panless figure keeps its menu
+  host.dispose();
+  assert.equal(canvas.listenerCount('contextmenu'), 0);
+});
+
+test('orbit: home drops a queued notch; disabled stops preventing the wheel', () => {
+  const { canvas, cam, orbit, frame, host } = rig();
+  canvas.dispatch('wheel', { deltaY: 100, deltaMode: 0 });
+  orbit.home();
+  near3(cam.eye, [0, 0, 10]);
+  assert.equal(frame(DT), false);                          // the notch went with the drain
+  near3(cam.eye, [0, 0, 10]);
+  orbit.enabled = false;
+  let prevented = 0;
+  canvas.dispatch('wheel', { deltaY: 100, deltaMode: 0, preventDefault: () => prevented++ });
+  assert.equal(prevented, 0);
+  assert.equal(frame(DT), false);
+  near3(cam.eye, [0, 0, 10]);
   host.dispose();
 });

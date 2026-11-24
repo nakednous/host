@@ -13,14 +13,20 @@
  *   (width / rect.width), the logical size read off the view bag's vp. These
  *   are the numbers mapLocation(SCREEN) and vp expect (a viewport of negative
  *   height), so a CSS-scaled canvas maps correctly.
- * - Per pointer: an entry { id, x, y, seq, down, up, cancel, owner }, kept
- *   from its press until the frame after its release; `seq` counts moves,
- *   so a consumer remembers the last seq it consumed and reads only new
- *   motion. Multitouch is per-pointer by construction; the mouse is one
- *   more pointer.
- * - Presses queue in order for the frame (`presses`); consumers read the
- *   queue inside the frame and claim what they take. Several same-frame
- *   presses on different members all land.
+ * - Per pointer: an entry { id, x, y, seq, down, up, cancel, owner, button,
+ *   shift, buttons }, kept from its press until the frame after its release;
+ *   `seq` counts moves, so a consumer remembers the last seq it consumed and
+ *   reads only new motion. Multitouch is per-pointer by construction; the
+ *   mouse is one more pointer.
+ * - `button` and `shift` are the press's own facts, written when the pointer
+ *   goes down and never again: a chord's later buttons arrive as moves on the
+ *   same pointer, so a drag's initiating button and modifier are readable for
+ *   its whole life. `buttons` is the live mask, updated on every event, and a
+ *   pointer ends only when that mask empties — a partial release is a move.
+ *   `button === 0` is the primary press, the one a grab adopts.
+ * - Presses queue in order for the frame (`presses`, each { id, x, y, button,
+ *   shift }); consumers read the queue inside the frame and claim what they
+ *   take. Several same-frame presses on different members all land.
  * - Claims: claim(id, owner) captures the pointer on the canvas so a drag
  *   that leaves it keeps flowing; release(id), up and cancel release the
  *   capture. An unclaimed pointer is what the orbit sees.
@@ -59,9 +65,18 @@ export function createPointer(canvas, view) {
 
   const entry = (id) => {
     let p = pointers.get(id);
-    if (!p) { p = { id, x: 0, y: 0, seq: 0, down: false, up: false, cancel: false, owner: null }; pointers.set(id, p); }
+    if (!p) {
+      p = { id, x: 0, y: 0, seq: 0, down: false, up: false, cancel: false, owner: null,
+            button: 0, shift: false, buttons: 0 };
+      pointers.set(id, p);
+    }
     return p;
   };
+
+  // What the DOM reports as the press's own facts, with the defaults a real
+  // event carries so a synthetic one (a test, a fixture) reads the same.
+  const buttonOf = (e) => typeof e.button === 'number' ? e.button : 0;
+  const maskOf   = (e) => typeof e.buttons === 'number' ? e.buttons : 0;
 
   const capture = (id, on) => {
     const f = on ? canvas.setPointerCapture : canvas.releasePointerCapture;
@@ -74,18 +89,24 @@ export function createPointer(canvas, view) {
     toCanvas(e, xy);
     p.x = xy[0]; p.y = xy[1]; p.seq++;
     p.down = true; p.up = false; p.cancel = false;
-    presses.push({ id: p.id, x: p.x, y: p.y });
+    // The initiating transition only: a chord's later buttons arrive as moves
+    // on the same pointer, so `button` and `shift` never change mid-drag.
+    p.button = buttonOf(e); p.shift = !!e.shiftKey; p.buttons = maskOf(e);
+    presses.push({ id: p.id, x: p.x, y: p.y, button: p.button, shift: p.shift });
   };
   const onMove = (e) => {
     const p = entry(e.pointerId);
     toCanvas(e, xy);
     p.x = xy[0]; p.y = xy[1]; p.seq++;
+    p.buttons = maskOf(e);
   };
   const onUp = (e) => {
     const p = pointers.get(e.pointerId);
     if (!p) return;
     toCanvas(e, xy);
     p.x = xy[0]; p.y = xy[1]; p.seq++;
+    p.buttons = maskOf(e);
+    if (p.buttons !== 0) return;          // a chord's partial release ends nothing; it is a move
     p.up = true;
     capture(p.id, false);
   };

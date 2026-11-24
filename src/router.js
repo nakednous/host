@@ -80,6 +80,7 @@ export class PointerRouter {
     const hs = this._handles, src = this._pointer;
     if (!src) return false;
     for (const pr of src.presses) {
+      if ((pr.button ?? 0) !== 0) continue;         // a grab is a primary press; the secondary pans
       if (src.ownerOf(pr.id) !== null) continue;
       const win = this._sharedPick(pr.x, pr.y);
       if (win && win._pid === null && win.enabled) win._adopt(pr.id, pr.x, pr.y);
